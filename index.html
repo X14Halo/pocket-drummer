@@ -1366,6 +1366,8 @@ const PAN = { kick: 0, snare: 0, cym: 0.3, ohat: 0.3, sizz: 0.3, ride: -0.35, be
 // Channel peak control. The tall kick/snare/tom attacks used to slam the master limiter, which then pulled the whole kit
 // (ride ring, snare ring, toms) down on every hit. A gentle soft-clip on those channels rounds off only the very top of
 // the loudest strokes (about 0-3 dB, a few milliseconds), so the bus limiter barely works and nothing else gets ducked.
+// strips that sound the same without a compressor (light, rarely-acting settings): skipping it saves phone CPU
+const NO_COMP = { bell: 1, perc: 1, ohat: 1, sizz: 1 };
 const CH_CLIP = { kick: 0.3, snare: 0.5, toms: 0.3, toms2: 0.3 };   // level where rounding starts
 const DRIVE = -6;
 const OUT_GAIN = 2;  // clean gain after the limiter: peaks now sit well below full scale, so this is free loudness    // dB less into the master limiter than before (it was doing up to 10-14 dB of gain reduction)
@@ -1446,59 +1448,55 @@ function createMixer(ctx, kit, opts = {}) {
   const W = (curve) => { const w = ctx.createWaveShaper(); w.curve = curve; w.oversample = '2x'; return w; };
 
   // master chain
-  N.glueIn = G(); N.glue = C(); N.makeup = G(); N.sat = W(shaperCurve(1)); N.satTrim = G();
+  N.glueIn = G(); N.glue = C(); N.makeup = G();
   N.mHP = F('highpass', 28, 0.7); N.mLow = F('lowshelf', 90); N.mMid = F('peaking', 420, 0.8); N.mHi = F('highshelf', 9000);
   N.lim = C(); N.lim.threshold.value = -5; N.lim.knee.value = 0; N.lim.ratio.value = 20; N.lim.attack.value = 0.001; N.lim.release.value = 0.06;
   N.limTrim = G(); N.limTrim.gain.value = dB(-autoMakeup(-5, 20) + OUT_GAIN);
-  N.clipPre = G(); N.clipPre.gain.value = 0.5; N.clip = ctx.createWaveShaper(); N.clip.curve = clipCurve(); N.clip.oversample = '4x';
+  N.clipPre = G(); N.clipPre.gain.value = 0.5; N.clip = ctx.createWaveShaper(); N.clip.curve = clipCurve(); N.clip.oversample = '2x';
   N.master = G();
   N.glue.knee.value = 8; N.glue.attack.value = 0.025; N.glue.release.value = 0.2;   // bus glue: slow attack lets hits punch through, smooth release
-  N.glueIn.connect(N.glue).connect(N.makeup).connect(N.sat).connect(N.satTrim).connect(N.mHP).connect(N.mLow).connect(N.mMid).connect(N.mHi).connect(N.lim).connect(N.limTrim).connect(N.clipPre).connect(N.clip).connect(N.master).connect(dest);
+  N.glueIn.connect(N.glue).connect(N.makeup).connect(N.mHP).connect(N.mLow).connect(N.mMid).connect(N.mHi).connect(N.lim).connect(N.limTrim).connect(N.clipPre).connect(N.clip).connect(N.master).connect(dest);
 
   // drum bus + parallel crush
   N.drum = G(); N.drum.connect(N.glueIn);
   N.kickBus = G(); N.kickBus.connect(N.makeup);
-  N.para = C(); N.para.threshold.value = -38; N.para.ratio.value = 12; N.para.knee.value = 0; N.para.attack.value = 0.002; N.para.release.value = 0.07;
-  N.paraSat = W(shaperCurve(2.2)); N.paraGain = G(); N.paraGain.gain.value = 0;
-  N.drum.connect(N.para).connect(N.paraSat).connect(N.paraGain).connect(N.glueIn);
 
   // reverb (two convolvers for click-free changes) and delay
   N.revIn = G(); N.revPre = ctx.createDelay(0.2); N.revRet = G(); N.revHP = F('highpass', 220, 0.6); N.revLP = F('lowpass', 7000, 0.5);
-  N.convA = ctx.createConvolver(); N.convB = ctx.createConvolver(); N.xA = G(); N.xB = G(); N.xB.gain.value = 0;
-  N.revIn.connect(N.revPre); N.revPre.connect(N.convA).connect(N.xA).connect(N.revHP); N.revPre.connect(N.convB).connect(N.xB).connect(N.revHP);
+  N.conv = null;   // created only for kits that use reverb (a convolver is the most expensive node here)
+  N.revIn.connect(N.revPre);
   N.revHP.connect(N.revLP).connect(N.revRet).connect(N.glueIn);
   N.dlyIn = G(); N.dly = ctx.createDelay(2); N.dlyHP = F('highpass', 300, 0.6); N.dlyLP = F('lowpass', 3000, 0.6); N.dlyFb = G(); N.dlyRet = G();
-  N.dlyIn.connect(N.dly).connect(N.dlyHP).connect(N.dlyLP); N.dlyLP.connect(N.dlyRet).connect(N.glueIn); N.dlyLP.connect(N.dlyFb).connect(N.dly);
+  N.dly.connect(N.dlyHP).connect(N.dlyLP); N.dlyLP.connect(N.dlyRet).connect(N.glueIn); N.dlyLP.connect(N.dlyFb).connect(N.dly);
+  let dlyOn = false;
   N.dlyRet.gain.value = 0; N.dlyFb.gain.value = 0;
 
   // channel strips
   const strips = {};
   for (const name of ['kick', 'snare', 'toms', 'toms2', 'cym', 'ride', 'ohat', 'sizz', 'bell', 'perc', 'room']) {
-    const s = { in: G(), hp: F('highpass', 20, 0.7), ls: F('lowshelf', 80), p: [F('peaking'), F('peaking'), F('peaking')], hs: F('highshelf', 9000), lp: F('lowpass', 20000, 0.6), comp: C(), fader: G(), rev: G(), dly: G() };
-    s.in.connect(s.hp).connect(s.ls).connect(s.p[0]).connect(s.p[1]).connect(s.p[2]).connect(s.hs).connect(s.lp).connect(s.comp);
+    const s = { in: G(), hp: F('highpass', 20, 0.7), ls: F('lowshelf', 80), p: [F('peaking'), F('peaking'), F('peaking')], hs: F('highshelf', 9000), lp: F('lowpass', 20000, 0.6), comp: NO_COMP[name] ? null : C(), fader: G(), rev: G(), dly: G() };
+    s.in.connect(s.hp).connect(s.ls).connect(s.p[0]).connect(s.p[1]).connect(s.p[2]).connect(s.hs).connect(s.lp);
+    const pre = s.comp ? s.lp.connect(s.comp) : s.lp;
     if (CH_CLIP[name]) {
       const k = 0.4 / CH_CLIP[name];
-      s.cPre = G(); s.cPre.gain.value = k; s.clip = W(chClipCurve()); s.clip.oversample = '4x'; s.cPost = G(); s.cPost.gain.value = 1 / k;
-      s.comp.connect(s.cPre).connect(s.clip).connect(s.cPost).connect(s.fader);
-    } else s.comp.connect(s.fader);
+      s.cPre = G(); s.cPre.gain.value = k; s.clip = W(chClipCurve()); s.clip.oversample = 'none'; s.cPost = G(); s.cPost.gain.value = 1 / k;
+      pre.connect(s.cPre).connect(s.clip).connect(s.cPost).connect(s.fader);
+    } else pre.connect(s.fader);
     s.pan = ctx.createStereoPanner(); s.pan.pan.value = PAN[name] || 0;
     // the kick goes around the bus glue (like a sidechain high-pass on a bus compressor), so its low end never pumps the kit
     s.fader.connect(s.pan).connect(name === 'kick' ? N.kickBus : N.drum);
     s.fader.connect(s.rev).connect(N.revIn); s.fader.connect(s.dly).connect(N.dlyIn);
     s.rev.gain.value = 0; s.dly.gain.value = 0;
-    s.comp.knee.value = 4;
+    if (s.comp) s.comp.knee.value = 4;
     strips[name] = s;
   }
-  // phone-speaker bass: harmonics of the kick's fundamental, so small speakers imply the low end
-  const k = strips.kick;
-  N.bLP1 = F('lowpass', 110, 0.7); N.bLP2 = F('lowpass', 110, 0.7); N.bShape = W(shaperCurve(3, 0.15)); N.bHP = F('highpass', 300, 0.7); N.bHP2 = F('highpass', 300, 0.7); N.bBand = F('lowpass', 1200, 0.6); N.bGain = G();
-  k.in.connect(N.bLP1).connect(N.bLP2).connect(N.bShape).connect(N.bHP).connect(N.bHP2).connect(N.bBand).connect(N.bGain).connect(k.comp);
-  // toms get a lighter dose
-  N.tLP = F('lowpass', 220, 0.7); N.tShape = W(shaperCurve(4, 0.1)); N.tHP = F('highpass', 160, 0.7); N.tGain = G();
-  strips.toms.in.connect(N.tLP).connect(N.tShape).connect(N.tHP).connect(N.tGain).connect(strips.toms.comp);
 
-  let cur = null, curKey = '', irKey = '', useA = true;
+  let cur = null, curKey = '', irKey = '';
   const voices = new Set(), openHats = [];
+  // polyphony per drum: older rings that have already decayed well down are faded out (like a drum sampler's voice limit),
+  // so fast ride/16th patterns don't pile up dozens of overlapping tails on slower phones
+  const VOICE_CAP = { ride: 5, bell: 4, kick: 4, snare: 5, rim: 3, xstick: 3, ltom: 3, htom: 3, hhc: 4, hhp: 3, hho: 3, hhh: 3, hhs: 3, tamb: 3, shaker: 3 };
+  const byPiece = {};
   const offsets = kit.offsets;
 
   function setSound(id, p, instant) {
@@ -1518,27 +1516,32 @@ function createMixer(ctx, kit, opts = {}) {
       set(s.lp.frequency, e.lp || 20000);
       const c = name === 'room' ? (snd.roomComp || [-20, 2, 0.01, 0.15]) : name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_COMP : ROCK_KICK_COMP) : ((snd.comp && snd.comp[CYM_LIKE[name] || name]) || (rockToms ? TOM_COMP : name === 'ohat' || name === 'sizz' ? OHAT_COMP : name === 'bell' ? BELL_COMP : [-18, 2, 0.01, 0.15]));
       const th = c[0] - (I - 0.5) * 4;
-      set(s.comp.threshold, th); set(s.comp.ratio, c[1]); set(s.comp.attack, c[2]); set(s.comp.release, c[3]);
+      if (s.comp) { set(s.comp.threshold, th); set(s.comp.ratio, c[1]); set(s.comp.attack, c[2]); set(s.comp.release, c[3]); }
       const busDb = name === 'room' ? 20 * Math.log10(Math.max(0.01, snd.room ?? 1)) : name === 'kick' ? KICK_BUS : ((snd.bus && snd.bus[CYM_LIKE[name] || name]) || 0);
       // keep a quarter of the compressor's own make-up so compressed drums come back up a little
-      set(s.fader.gain, dB(busDb - 0.75 * autoMakeup(th, c[1])));
+      set(s.fader.gain, dB(busDb - (s.comp ? 0.75 * autoMakeup(th, c[1]) : 0)));
       const dryOnly = name === 'room' || name === 'kick';
       const sk = CYM_LIKE[name] || name;
       set(s.rev.gain, dryOnly ? 0 : ((snd.rev && snd.rev.send[sk]) || 0));
       set(s.dly.gain, dryOnly ? 0 : ((snd.dly && snd.dly.send[sk]) || 0));
     }
     const bass = (snd.bass ?? 0.7) * (p.bass ?? 1);
-    set(N.bGain.gain, BASS_AMT > 0 ? BASS_AMT : 0); set(N.tGain.gain, 0);
     // reverb
-    const r = snd.rev || { type: 'room', decay: 0.8, pre: 0.01, lp: 6000 };
-    set(N.revPre.delayTime, r.pre); set(N.revLP.frequency, r.lp); set(N.revRet.gain, dB(r.ret || 0) * REV_RET);
-    const key = r.type + r.decay;
-    if (key !== irKey) {
-      irKey = key;
-      const ir = makeIR(ctx, r.type, r.decay, 99);
-      const [toConv, toX, fromX] = useA ? [N.convB, N.xB, N.xA] : [N.convA, N.xA, N.xB];
-      toConv.buffer = ir; useA = !useA;
-      if (instant) { toX.gain.value = 1; fromX.gain.value = 0; } else { toX.gain.setTargetAtTime(1, t, 0.15); fromX.gain.setTargetAtTime(0, t, 0.15); }
+    const r = snd.rev;
+    if (r) {
+      set(N.revPre.delayTime, r.pre); set(N.revLP.frequency, r.lp); set(N.revRet.gain, dB(r.ret || 0) * REV_RET);
+      const key = r.type + r.decay;
+      if (key !== irKey) {
+        irKey = key;
+        const old = N.conv;
+        N.conv = ctx.createConvolver(); N.conv.buffer = makeIR(ctx, r.type, r.decay, 99);
+        N.revPre.connect(N.conv).connect(N.revHP);
+        if (old) { try { N.revPre.disconnect(old); } catch (e) {} setTimeout(() => { try { old.disconnect(); } catch (e) {} }, 2500); }
+      }
+    } else if (N.conv) {
+      const old = N.conv; N.conv = null; irKey = '';
+      try { N.revPre.disconnect(old); } catch (e) {}
+      setTimeout(() => { try { old.disconnect(); } catch (e) {} }, instant ? 0 : 2500);   // let the tail ring out first
     }
     // delay
     const dl = snd.dly;
@@ -1546,15 +1549,14 @@ function createMixer(ctx, kit, opts = {}) {
       const beat = 60 / (p.bpm || 110);
       const dt = dl.time === 'slap' ? 0.095 : dl.time === '8d' ? beat * 0.75 : dl.time === '8' ? beat * 0.5 : beat;
       set(N.dly.delayTime, Math.min(1.9, dt)); set(N.dlyFb.gain, dl.fb); set(N.dlyLP.frequency, dl.lp); set(N.dlyHP.frequency, dl.hp); set(N.dlyRet.gain, 1);
-    } else { set(N.dlyRet.gain, 0); set(N.dlyFb.gain, 0); }
+      if (!dlyOn) { N.dlyIn.connect(N.dly); dlyOn = true; }
+    } else { set(N.dlyRet.gain, 0); set(N.dlyFb.gain, 0); if (dlyOn) { try { N.dlyIn.disconnect(N.dly); } catch (e) {} dlyOn = false; } }
     // bus + master
     const g = snd.glue || [-14, 2.5];
     const gth = g[0] + 1 - 6 * (I - 0.5), grat = 1.5 + 0.35 * (g[1] - 1) + 0.7 * I;   // bus glue: gentle, ~1 dB, so one loud kick doesn't pump the cymbals
     set(N.glue.threshold, gth); set(N.glue.ratio, grat);
     set(N.makeup.gain, dB(-0.8 * autoMakeup(gth, grat) + (snd.trim || 0) + (p.trim || 0) + DRIVE));   // harder hitting is louder by itself
-    set(N.paraGain.gain, 0);
     const drive = (snd.sat || 1.2) * (0.85 + 0.3 * I);
-    N.sat.curve = null; set(N.satTrim.gain, 1);   // clean: no saturation stage
     const m = snd.master || [0, 0, 0];
     set(N.mLow.gain, m[0]); set(N.mMid.gain, m[1]); set(N.mHi.gain, m[2]);
     set(N.master.gain, p.vol ?? 1);
@@ -1603,9 +1605,17 @@ function createMixer(ctx, kit, opts = {}) {
       src.connect(g).connect(dst);
       src.start(time, h.seg.s + off, h.seg.d);
       voice.srcs.push(src); voice.gs.push(g);
-      src.onended = () => { g.disconnect(); voices.delete(voice); };
+      src.onended = () => { g.disconnect(); voices.delete(voice); const l = byPiece[piece]; if (l) { const i = l.indexOf(voice); if (i >= 0) l.splice(i, 1); } };
     }
     if (piece === 'hho' || piece === 'hhh' || piece === 'hhs') openHats.push(voice);
+    const list = byPiece[piece] || (byPiece[piece] = []);
+    list.push(voice);
+    while (list.length > (VOICE_CAP[piece] || 4)) {
+      const old = list.shift();
+      if (!voices.has(old)) continue;
+      for (const g of old.gs) { try { g.gain.cancelScheduledValues(time); g.gain.setTargetAtTime(0, time, 0.06); } catch (e) {} }
+      for (const s of old.srcs) { try { s.stop(time + 0.5); } catch (e) {} }
+    }
     voices.add(voice);
   }
 
@@ -1614,7 +1624,7 @@ function createMixer(ctx, kit, opts = {}) {
       for (const g of v.gs) { try { g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0, t, tc); } catch (e) {} }
       for (const s of v.srcs) { try { s.stop(t + tc * 8); } catch (e) {} }
     }
-    voices.clear(); openHats.length = 0;
+    voices.clear(); openHats.length = 0; for (const k in byPiece) byPiece[k].length = 0;
   }
 
   function stopAll(t) {
@@ -1674,7 +1684,8 @@ function syncOffset(buf, sync) {
 }
 async function loadKit() {
   const AC = window.AudioContext || window.webkitAudioContext;
-  ctx = new AC({ latencyHint: 'interactive' });
+  // 'playback' asks for a larger audio buffer: a backing track doesn't need low latency, and slower phones stop crackling
+  try { ctx = new AC({ latencyHint: 'playback' }); } catch (e) { ctx = new AC(); }
   const map = JSON.parse($('kitmap').textContent);
   const [close, room] = await Promise.all([decode(ctx, b64ToBytes($('kitdata').textContent)), decode(ctx, b64ToBytes($('roomdata').textContent))]);
   const KIT = {};
@@ -1749,7 +1760,9 @@ function scheduleBeat() {
   sched.beat++;
   if (sched.beat >= beats) { sched.beat = 0; if (!sched.cur.count) sched.bar++; }
 }
-function pump() { if (!sched.playing) return; while (sched.next < ctx.currentTime + 0.14) scheduleBeat(); }
+// schedule well ahead so a busy phone (or a throttled timer) never plays a note late
+const AHEAD = 0.3;
+function pump() { if (!sched.playing) return; while (sched.next < ctx.currentTime + AHEAD) scheduleBeat(); }
 
 let wakeLock = null;
 async function start(atTime) {
@@ -2072,7 +2085,8 @@ function eventAngle(t, len, tpl, trip) {
 function draw() {
   requestAnimationFrame(draw);
   if (!W) return;
-  const now = ctx ? ctx.currentTime : 0;
+  // what you hear right now = audio clock minus the output buffer delay, so lights and playhead stay on the beat
+  const now = ctx ? ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0) : 0;
   const c = W / 2, h = curHue();
   g2.clearRect(0, 0, W, W);
 
@@ -2559,6 +2573,15 @@ window.__pocketTest = {
       return { frames, sr, loopDur: loop.loopDur, L: Array.from(audio.L), cont: Array.from(cont.getChannelData(0)), wav: Array.from(wavBytes(audio)), mp3: mp3 ? Array.from(mp3) : null };
     } finally { Object.assign(S, keep); }
   },
+  // DSP cost: wall-clock time to render a busy groove offline (lower is lighter for slow phones)
+  async bench(over = {}, sid = null, bars = 8) {
+    const g = this.grooveHits(over, bars), sr = 48000, octx = new OfflineAudioContext(2, Math.round(sr * (g.dur + 0.5)), sr);
+    const m = createMixer(octx, KITD, { antiRepeat: false });
+    m.setSound(sid || g.sound, { I: over.I ?? 0.6, bpm: over.bpm ?? 110, vol: 1 }, true);
+    for (const [p, v, t] of g.hits) m.play(p, v, t, Math.random);
+    const t0 = performance.now(); await octx.startRendering();
+    return { ms: performance.now() - t0, audioSec: g.dur + 0.5 };
+  },
   // render a list of [piece, vel, time] through a fresh mixer (mix audits)
   async mixRender(hits, sid, I = 0.5, secs = 2, bypass = []) {
     const sr = 44100, octx = new OfflineAudioContext(2, Math.round(sr * secs), sr);
@@ -2568,7 +2591,7 @@ window.__pocketTest = {
     if (bypass.includes('lim')) { off(N.lim); N.limTrim.gain.value = 1; }
     if (bypass.includes('glue')) { off(N.glue); }
     if (bypass.includes('room')) off(N.strips.room.comp);
-    if (bypass.includes('strips')) for (const k in N.strips) if (k !== 'room') off(N.strips[k].comp);
+    if (bypass.includes('strips')) for (const k in N.strips) if (k !== 'room' && N.strips[k].comp) off(N.strips[k].comp);
     if (bypass.includes('clip')) { N.clip.curve = null; }
     for (const o of bypass) if (String(o).startsWith('drive=')) N.makeup.gain.value *= Math.pow(10, parseFloat(o.slice(6)) / 20);
     const rnd = mulberry(11);
