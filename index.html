@@ -959,7 +959,7 @@ function compileBar(st, barNo, crashHere) {
         case 'H':
           if (ch === 'O' || ch === 'Q') p = 'hho';
           else if (lift && I > 0.9) { p = 'ride'; }
-          else p = lift && I >= 0.7 ? 'hhh' : 'hhc';
+          else p = lift && I >= 0.78 && (i * step) % TPB === 0 ? 'hhh' : 'hhc';   // loose hat on the beats, closed in between
           break;
         case 'R': p = ch === 'b' ? 'bell' : 'ride'; break;
         case 'P': p = 'hhp'; break;
@@ -1010,47 +1010,61 @@ function embellish(ev, st, tp, beats, barNo, I, vmul) {
   const a = clamp((st.B - 0.5) / 0.5, 0, 1);
   if (a <= 0) return;
   const [gAmt, kAmt, hAmt] = EMB[tp.style] || [0.5, 0.5, 0.5];
-  const sub = tp.sub, g = TPB / sub, len = beats * TPB;
+  const sub = tp.sub, g = TPB / sub, len = beats * TPB, bpm = st.bpm || 110;
   const comp = METERS[tp.meter].comp;
   const ratio = sub === 3 ? 0.5 : swingRatio(st.swing);
   const swung = sub === 2 && ratio >= 0.56;
+  const straight = sub === 4 || (sub === 2 && !swung);
+  // straight grooves get the full sixteenth grid (as long as sixteenths are playable at the tempo)
+  const gs = straight && bpm <= 165 ? 3 : g;
+  const triplet = sub === 3 || swung;
   // value in 0..1 for a slot; ~25% of slots re-roll on alternate bars for natural variation
   const R = (kind, t) => {
     const alt = hash32(st.seed, kind, t, 'alt') < 0.25 ? barNo % 2 : 0;
     return hash32(st.seed, 'emb', kind, t, alt);
   };
-  const at = (lane, t) => ev.some(e => e.lane === lane && e.t === t);
-  const kickAt = t => ev.some(e => e.lane === 'K' && e.t === t);
+  const at = (lane, t) => ev.some(e => e.lane === lane && Math.abs(e.t - t) < 0.01);
+  const kickAt = t => at('K', t);
   const accents = ev.filter(e => e.lane === 'S' && (e.ch === 'X' || e.ch === 'x')).map(e => e.t);
-  const isBackbeat = t => accents.includes(t);
+  const isBackbeat = t => accents.some(x => Math.abs(x - t) < 0.01);
   const pick = (cands, n, kind) => cands
     .map(c => ({ ...c, k: R(kind, c.t) / c.w }))
     .sort((x, y) => x.k - y.k).slice(0, n);
-  const slots = [];
-  for (let t = 0; t < len; t += g) slots.push(t);
-  const pos = t => t % TPB;            // position inside the beat in ticks
+  const slotsOf = step => { const o = []; for (let t = 0; t < len; t += step) o.push(t); return o; };
+  const slots = slotsOf(gs);
+  if (triplet && sub === 2) for (let b = 0; b < beats; b++) slots.push(b * TPB + 4);   // triplet middle partial in swung grooves
+  slots.sort((x, y) => x - y);
+  const pos = t => t % TPB;
+  const tripFlag = t => (sub === 2 && triplet && pos(t) === 4 ? { trip: true } : {});
 
   // --- snare ghosts ---
   const sHits = ev.filter(e => e.lane === 'S').length;
-  const snareBusy = sHits >= slots.length * 0.5;   // train beats etc. already full
+  const snareBusy = sHits >= slotsOf(g).length * 0.5;   // train beats etc. already full
+  const jazz = tp.style === 'jazz';
+  const ghostV = t => (jazz ? 0.26 + 0.12 * R('gv', t) : 0.15 + 0.08 * R('gv', t)) * (0.8 + 0.4 * I);
   if (gAmt > 0 && !snareBusy && accents.length) {
     const cands = [];
     for (const t of slots) {
       if (pos(t) === 0 || at('S', t) || kickAt(t)) continue;
-      if (isBackbeat(t - g)) continue;             // keep the note right after the backbeat clean
+      if (accents.some(x => t > x && t - x <= gs + 0.01)) continue;   // keep the note right after the backbeat clean
       let w = 0.6;
-      if (isBackbeat(t + g)) w = 1.6;              // the classic pickup ghost into 2 and 4
-      else if (sub === 4 && pos(t) === 3) w = 0.9; // "e"
-      else if (sub === 4 && pos(t) === 9) w = 1.1; // "a"
-      else if (sub === 3 && pos(t) === 8) w = 1.1; // last triplet partial
+      if (accents.some(x => x > t && x - t <= gs + 0.01)) w = 1.6;     // pickup ghost into the backbeat
+      else if (pos(t) === 3) w = 0.9;                                   // "e"
+      else if (pos(t) === 9) w = 1.15;                                  // "a"
+      else if (pos(t) === 8) w = 1.1;                                   // last triplet partial
+      else if (pos(t) === 4) w = 0.7;                                   // middle triplet partial
       cands.push({ t, w });
     }
-    const max = Math.round(beats * (sub === 4 ? 1.25 : 0.85) * gAmt);
+    const max = Math.round(beats * (gs === 3 ? 1.6 : 0.9) * gAmt);
     const n = Math.min(cands.length, Math.round(max * (0.35 + 0.65 * a)));
-    const jazz = tp.style === 'jazz';
-    for (const c of pick(cands, n, 'g')) {
-      const v = jazz ? 0.26 + 0.12 * R('gv', c.t) : 0.16 + 0.07 * R('gv', c.t);
-      ev.push({ t: c.t, lane: 'S', p: 'snare', v: v * (0.8 + 0.4 * I), ch: 'g', emb: true });
+    for (const c of pick(cands, n, 'g')) ev.push({ t: c.t, lane: 'S', p: 'snare', v: ghostV(c.t), ch: 'g', emb: true, ...tripFlag(c.t) });
+    // 32nd-note drags into a backbeat (busy end of the slider, slower straight grooves)
+    if (straight && !jazz && bpm <= 118 && a > 0.5 && gAmt >= 0.5) {
+      for (const x of accents) {
+        if (R('drag', x) > a * gAmt * 0.95) continue;
+        for (const d of [3, 1.5]) if (x - d > 0 && !at('S', x - d) && !kickAt(x - d)) ev.push({ t: x - d, lane: 'S', p: 'snare', v: ghostV(x - d) * (d === 3 ? 0.9 : 1.1), ch: 'g', emb: true });
+        break;   // one drag per bar is plenty
+      }
     }
   }
 
@@ -1058,22 +1072,23 @@ function embellish(ev, st, tp, beats, barNo, I, vmul) {
   const oneDrop = !kickAt(0);                       // reggae one-drop and friends: leave the 1 empty
   if (kAmt > 0 && !(oneDrop && tp.style === 'reggae')) {
     const heavy = tp.style === 'heavy';
+    const kg = gs === 3 && bpm <= 150 ? 3 : g;
     const cands = [];
-    for (const t of slots) {
+    for (const t of slotsOf(kg)) {
       if (kickAt(t) || isBackbeat(t)) continue;
-      if (kickAt(t - g) && kickAt(t - 2 * g) && !heavy) continue;   // no runs of three
+      if (kickAt(t - kg) && kickAt(t - 2 * kg) && !heavy) continue;   // no runs of three (except heavy)
       let w;
       if (pos(t) === 0) w = 0.5;
       else if (pos(t) === TPB / 2) w = 1.0;                          // "&"
-      else if (sub === 4 && pos(t) === 9) w = 0.85;                  // "a" into the next beat
-      else if (sub === 3 && pos(t) === 8) w = 1.0;
-      else w = 0.3;
-      if (heavy && kickAt(t - g)) w *= 2.2;                          // double-kick pairs
-      if (t === len - g) w *= 1.2;                                   // pickup into the 1
-      if (isBackbeat(t + g) && !heavy && tp.style !== 'funk') w *= 0.5;
+      else if (pos(t) === 9) w = 0.9;                                // "a" into the next beat
+      else if (pos(t) === 8) w = 1.0;
+      else w = 0.35;
+      if (heavy && kickAt(t - kg)) w *= 2.4;                         // double-kick pairs and runs
+      if (t === len - kg) w *= 1.2;                                  // pickup into the 1
+      if (isBackbeat(t + kg) && !heavy && tp.style !== 'funk') w *= 0.5;
       cands.push({ t, w });
     }
-    const max = Math.round((comp ? 1 : beats * 0.75) * kAmt + (heavy ? 1 : 0));
+    const max = Math.round((comp ? 1.2 : beats * (kg === 3 ? 0.95 : 0.75)) * kAmt + (heavy ? 1.5 : 0));
     const n = Math.min(cands.length, Math.round(max * (0.3 + 0.7 * a)));
     for (const c of pick(cands, n, 'k')) {
       ev.push({ t: c.t, lane: 'K', p: 'kick', v: (0.6 + 0.14 * R('kv', c.t)) * vmul, ch: 'o', emb: true });
@@ -1087,33 +1102,42 @@ function embellish(ev, st, tp, beats, barNo, I, vmul) {
     const tev = ev.filter(e => e.lane === lane);
     if (tev.length) {
       const closed = tev.find(e => e.ch !== 'O' && e.ch !== 'Q') || tev[0];
-      const base = { lane, p: closed.p === 'hho' ? 'hhc' : closed.p };
+      const base = { lane, p: closed.p === 'hho' || closed.p === 'hhh' ? 'hhc' : closed.p };
       const toms = st.time === 'low' || st.time === 'toms';
       let frac = a * hAmt * (toms ? 0.5 : 1);
-      const add = (t, w, extra = {}) => {
-        if (at(lane, t)) return;
-        if (R('h', t) < frac * w) ev.push({ ...base, t, v: (0.42 + 0.1 * R('hv', t)) * vmul, ch: 'v', emb: true, ...extra });
+      const add = (t, w, vel = 0.42, extra = {}) => {
+        if (at(lane, t)) return false;
+        if (R('h', t) >= frac * w) return false;
+        ev.push({ ...base, t, v: (vel + 0.1 * R('hv', t)) * vmul, ch: 'v', emb: true, ...extra });
+        return true;
       };
       const has8ths = tev.some(e => pos(e.t) === TPB / 2);
       if (!has8ths && !comp) {
-        // quarter-note time → fill in the eighths
-        for (let b = 0; b < beats; b++) add(b * TPB + TPB / 2, 1.3);
-      } else if (sub === 4 && st.bpm <= 122) {
-        // eighths → sixteenths (the "a" skips come in first)
-        for (let b = 0; b < beats; b++) { add(b * TPB + 9, 1.25); add(b * TPB + 3, 0.8); }
-      } else if (sub === 2 && !swung && st.bpm <= 118) {
-        for (let b = 0; b < beats; b++) { add(b * TPB + 9, 1.1); add(b * TPB + 3, 0.6); }
-      } else if ((sub === 3 || swung) && tp.style !== 'jazz') {
-        // shuffle → fill in the middle triplet partial now and then
-        frac *= 0.6;
-        for (let b = 0; b < beats; b++) add(b * TPB + 4, 1, { trip: true });
+        for (let b = 0; b < beats; b++) add(b * TPB + TPB / 2, 1.3);         // quarter-note time → eighths
       }
-      // an open-hat bark on the last "&" every other bar, when the groove is on hats
-      if (lane === 'H' && !comp && barNo % 2 === 1 && a > 0.35 && R('open', 0) < hAmt * 0.55 &&
+      if (straight && bpm <= 135) {
+        // eighths → sixteenths (the "a" skips come in first); thinner at brisk tempos
+        if (bpm > 120) frac *= 0.7;
+        for (let b = 0; b < beats; b++) { add(b * TPB + 9, 1.3); add(b * TPB + 3, 0.85); }
+        // 32nd-note doubles: a quick "tk" on a sixteenth here and there (slower grooves)
+        if (bpm <= 108 && a > 0.45 && hAmt >= 0.6) {
+          const spots = ev.filter(e => e.lane === lane && pos(e.t) % 3 === 0 && pos(e.t) !== 0 && e.t + 1.5 < len && !at(lane, e.t + 1.5))
+            .map(e => ({ t: e.t, w: pos(e.t) === 9 ? 1.4 : 0.8 }));
+          for (const c of pick(spots, a > 0.75 ? 3 : 2, 'h32')) {
+            if (R('h32on', c.t) < a * hAmt) ev.push({ ...base, t: c.t + 1.5, v: (0.3 + 0.06 * R('hv', c.t)) * vmul, ch: 'v', emb: true });
+          }
+        }
+      } else if (triplet && tp.style !== 'jazz') {
+        // shuffles: fill in the middle triplet partial now and then
+        frac *= 0.65;
+        for (let b = 0; b < beats; b++) add(b * TPB + 4, 1, 0.4, sub === 2 ? { trip: true } : {});
+      }
+      // an open-hat bark on the last "&" every other bar, when the groove is on hats (soft, never in heavy)
+      if (lane === 'H' && !comp && tp.style !== 'heavy' && barNo % 2 === 1 && a > 0.35 && R('open', 0) < hAmt * 0.5 &&
           !tev.some(e => e.ch === 'O' || e.ch === 'Q')) {
         const t = len - TPB / 2;
         const e = ev.find(x => x.lane === 'H' && x.t === t);
-        if (e) { e.p = 'hho'; e.ch = 'O'; e.v = 0.72 * vmul; }
+        if (e) { e.p = 'hho'; e.ch = 'O'; e.v = 0.62 * vmul; }
         for (let i = ev.length - 1; i >= 0; i--) if (ev[i].lane === 'H' && ev[i].t > t && ev[i].emb) ev.splice(i, 1);
       }
     }
@@ -1139,7 +1163,7 @@ function applyTime(ev, st, tp, beats, I, lift, vmul) {
     e.lane = 'H'; // time always draws on the outer ring
     if (!convert) continue;
     const open = e.ch === 'O' || e.ch === 'Q';
-    if (mode === 'hats') e.p = open ? 'hho' : (lift && I >= 0.7 ? 'hhh' : 'hhc');
+    if (mode === 'hats') e.p = open ? 'hho' : (lift && I >= 0.78 && e.t % TPB === 0 ? 'hhh' : 'hhc');
     else if (mode === 'ride') { e.p = 'ride'; if (open) e.v *= 1.12; }
     else if (mode === 'low') e.p = 'ltom';
     else { const onBeat = e.t % TPB === 0; hand = onBeat ? 0 : hand ^ 1; e.p = hand ? 'htom' : 'ltom'; }
@@ -1324,7 +1348,7 @@ const BUS_OF = { kick: 'kick', snare: 'snare', rim: 'snare', xstick: 'snare', lt
 const TUNE_OF = { kick: 'kick', snare: 'snare', rim: 'snare', xstick: 'snare', ltom: 'ltom', htom: 'htom' };
 const LEN_OF = { kick: 'kick', snare: 'snare', rim: 'snare', ltom: 'toms', htom: 'toms' };
 // natural recorded level of each drum (top velocity layer plays as recorded); open hi-hat kept a little lower
-const REF = {kick:  0.61,  snare:  0.84,  rim:  0.762,  xstick:  0.304,  hhc:  0.357,  hhh:  0.136,  hho:  0.331,  hhp:  0.062,  ride:  0.192,  bell:  0.134,  ltom:  0.424,  htom:  0.457,  tamb:  0.082,  shaker:  0.116};
+const REF = {kick:  0.61,  snare:  0.84,  rim:  0.762,  xstick:  0.304,  hhc:  0.357,  hhh:  0.075,  hho:  0.26,  hhp:  0.062,  ride:  0.192,  bell:  0.134,  ltom:  0.424,  htom:  0.457,  tamb:  0.082,  shaker:  0.116};
 const dB = v => Math.pow(10, v / 20);
 // The Web Audio compressor adds its own make-up gain: (1 / fullRangeGain) ^ 0.6. We cancel it so gain staging stays predictable.
 const autoMakeup = (th, ratio) => (ratio > 1 && th < 0 ? 0.6 * -th * (1 - 1 / ratio) : 0);
