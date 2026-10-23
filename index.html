@@ -309,7 +309,7 @@ footer a { color: var(--mute); }
 <div class="app">
   <header>
     <div class="brand"><b>pocket<i>.</i></b><span>a session drummer for your guitar</span></div>
-    <div class="keys"><kbd>Space</kbd> play · <kbd>T</kbd> tap · <kbd>R</kbd> roll · <kbd>←</kbd><kbd>→</kbd> groove</div>
+    <div class="keys"><kbd>Space</kbd> play · <kbd>T</kbd> tap · <kbd>R</kbd> roll</div>
   </header>
 
   <div class="main">
@@ -320,9 +320,7 @@ footer a { color: var(--mute); }
       </div>
       <div class="legend" aria-hidden="true"><span class="k">kick</span><span class="s">snare</span><span class="t">toms</span><span class="h">hats · ride</span></div>
       <div class="groove-row">
-        <button class="arrow" id="prev" aria-label="Previous groove"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg></button>
         <div class="groove-name"><h1 id="gname">Straight Rock</h1><p id="gmeta">4/4 · 1 of 5</p><p class="gkit" id="gkit">Big room kit</p></div>
-        <button class="arrow" id="next" aria-label="Next groove"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg></button>
       </div>
       <button class="dice" id="dice">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.4" fill="currentColor" stroke="none"/></svg>
@@ -334,6 +332,7 @@ footer a { color: var(--mute); }
       <div>
         <div class="section-label"><span>Style</span><button class="lock" id="lockStyle" aria-pressed="false" aria-label="Keep style when rolling" title="Keep style when rolling"></button></div>
         <div class="styles" id="styles"></div>
+        <div class="meter-hint" id="styleHint"></div>
       </div>
 
       <div>
@@ -446,9 +445,8 @@ const METERS = {
   '3/4':  { beats: 3, comp: false, word: 'three', hint: 'Waltz · count 1 2 3' },
   '6/8':  { beats: 2, comp: true,  word: 'six',   hint: 'Rolling · 1 2 3, 4 5 6' },
   '12/8': { beats: 4, comp: true,  word: 'twelve', hint: 'Slow blues triplet feel' },
-  '5/4':  { beats: 5, comp: false, word: 'five',  hint: 'Count 1 2 3 4 5' },
 };
-const METER_ORDER = ['4/4', '3/4', '6/8', '12/8', '5/4'];
+const METER_ORDER = ['4/4', '3/4', '6/8', '12/8'];
 
 const STYLES = [
   { id: 'rock',    name: 'Rock',    hue: 8,   family: 'rock',    perc: 'tamb',   snare: 'auto',   lift: true,  lay: 3, fill: 'rock',  eq: [2.5, -2.5, 1.5] },
@@ -500,7 +498,14 @@ const TEMPLATES = [
   T('shuffle', 'Shuffle Waltz', '3/4', 2, [110, 150], { H: 'xv xv xv', K: 'X. .. .o', S: '.. X. X.' }, { swing: 0.7 }),
 
   // ---------- COUNTRY ----------
-  T('country', 'Train Beat', '4/4', 4, [100, 130], { S: 'Ggxg Xgxg Ggxg Xgxg', K: 'X... .... X... ....', P: '.... x... .... x...' }, { snare: 'auto' }),
+  T('country', 'Train Beat', '4/4', 2, [110, 160], { S: 'ss Xs ss Xs', K: 'X. .. X. ..' }, { swing: 0.74, snare: 'auto' }),
+  T('country', 'Pickup Train Beat', '4/4', 2, [110, 160], { S: 'sX Xs sX Xs', K: 'X. .. X. ..' }, { swing: 0.74, snare: 'auto' }),
+  T('country', 'Echo Train Beat', '4/4', 2, [110, 160], { S: 'ss XX ss XX', K: 'X. .. X. ..' }, { swing: 0.74, snare: 'auto' }),
+  T('country', 'Double-Accent Train Beat', '4/4', 2, [110, 150], { S: 'sX XX sX XX', K: 'X. .. X. ..' }, { swing: 0.74, snare: 'auto' }),
+  T('country', 'Pushed Train Beat', '4/4', 2, [110, 160], { S: 'ss Xs sX Xs', K: 'X. .. X. ..' }, { swing: 0.74, snare: 'auto' }),
+  T('country', 'Train Beat with Hat Foot', '4/4', 2, [110, 160], { S: 'ss Xs ss Xs', K: 'X. .. X. ..', P: '.. x. .. x.' }, { swing: 0.74, snare: 'auto' }),
+  T('country', 'Straight Train Beat', '4/4', 2, [120, 170], { S: 'ss Xs ss Xs', K: 'X. .. X. ..' }, { swing: 0.45, snare: 'auto' }),
+  T('country', 'Sixteenth Train Beat', '4/4', 4, [90, 120], { S: 'ssss Xsss ssss Xsss', K: 'X... .... X... ....' }, { snare: 'auto' }),
   T('country', 'Two-Step', '4/4', 2, [150, 200], { H: 'xo xo xo xo', K: 'X. .. X. ..', S: '.. x. .. x.' }),
   T('country', 'Country Shuffle', '4/4', 2, [100, 130], { H: 'xv xv xv xv', K: 'X. .. X. ..', S: '.. x. .. x.' }, { swing: 0.74 }),
   T('country', 'Country Ballad', '4/4', 2, [64, 84], { H: 'xv xv xv xv', K: 'X. .. .o ..', S: '.. x. .. x.' }),
@@ -558,7 +563,6 @@ const TEMPLATES = [
   T('rock', 'Open-Hat Rock', '4/4', 4, [108, 140], { H: 'x.O. x.O. x.O. x.O.', K: 'X... ..o. X... ....', S: '.... X... .... X...' }),
   T('rock', 'Rock Anthem', '4/4', 4, [88, 112], { H: 'x.v. x.v. x.v. x.v.', K: 'X... .... X... ..X.', S: '.... X... .... X...' }, { lift: true }),
   T('rock', 'Classic Rock Swagger', '4/4', 2, [96, 126], { H: 'xv xv xv xv', K: 'X. .o X. .o', S: '.. X. .g X.' }, { swing: 0.35 }),
-  T('rock', 'Rock in Five', '5/4', 2, [110, 150], { H: 'xv xv xv xv xv', K: 'X. .. X. .o ..', S: '.. X. .. .. X.' }),
   T('rock', 'Rock Three', '3/4', 4, [100, 140], { H: 'x.v. x.v. x.v.', K: 'X... ..o. ....', S: '.... X... X...' }),
 
   // ---------- MORE BLUES ----------
@@ -586,14 +590,13 @@ const TEMPLATES = [
   T('country', 'Rockabilly', '4/4', 2, [150, 190], { S: 'x. Xg x. Xg', K: 'X. .. X. ..', P: '.. x. .. x.' }, { swing: 0.7, snare: 'auto' }),
   T('country', 'Western Swing', '4/4', 2, [150, 200], { R: 'x. xx x. xx', K: 'X. .. X. ..', S: '.. x. .. x.', P: '.. x. .. x.' }, { swing: 0.7 }),
   T('country', 'Country in Six', '6/8', 3, [54, 72], { H: 'xvv xvv', K: 'X.. ...', S: '... x..' }),
-  T('country', 'Train Waltz', '3/4', 4, [100, 130], { S: 'Ggxg Xgxg Xgxg', K: 'X... .... ....' }, { snare: 'auto' }),
+  T('country', 'Train Waltz', '3/4', 2, [110, 160], { S: 'ss Xs Xs', K: 'X. .. ..' }, { swing: 0.72, snare: 'auto' }),
   T('country', 'Honky-Tonk Shuffle', '4/4', 2, [110, 140], { H: 'xv xv xv xv', K: 'X. .o X. .o', S: '.. X. .. X.' }, { swing: 0.72, snare: 'auto' }),
 
   // ---------- MORE JAZZ ----------
   T('jazz', 'Two-Feel', '4/4', 2, [100, 150], { R: 'x. xx x. xx', K: 'x. .. x. ..', P: '.. x. .. x.', S: '.. .. .. .+' }, { swing: 0.72 }),
   T('jazz', 'Bebop', '4/4', 2, [180, 250], { R: 'x. xx x. xx', P: '.. x. .. x.', K: '.. .. .o ..', S: '.o .. .+ .o' }, { swing: 0.62 }),
   T('jazz', 'Jazz Shuffle', '4/4', 2, [110, 150], { R: 'x. xx x. xx', S: '.g .g .g .g', K: 'G. G. G. G.', P: '.. x. .. x.' }, { swing: 0.78 }),
-  T('jazz', 'Five-Four Swing', '5/4', 2, [150, 190], { R: 'x. xx x. xx x.', P: '.. x. .. x. ..', K: 'G. .. .. G. ..', S: '.. .. .o .+ ..' }, { swing: 0.7 }),
   T('jazz', 'Waltz on the Ride', '3/4', 2, [110, 170], { R: 'x. xx xx', P: '.. x. ..', K: 'G. .. ..', S: '.. .. .+' }, { swing: 0.68 }),
   T('jazz', 'Hard Bop', '4/4', 2, [150, 200], { R: 'x. xx x. xx', P: '.. x. .. x.', K: 'X. .. .. .o', S: '.. .x .. x.' }, { swing: 0.68 }),
   T('jazz', 'Six-Eight Swing', '6/8', 3, [90, 120], { R: 'xvv xvv', P: '... x..', K: 'X.. ...', S: '..o ...' }),
@@ -607,7 +610,6 @@ const TEMPLATES = [
   T('funk', 'Funk Shuffle', '4/4', 4, [88, 104], { H: 'x.v+ x.v+ x.v+ x.v+', K: 'X... ..X. X..o ....', S: '..g. X..g ..g. X.g.' }, { swing: 0.45 }),
   T('funk', 'Disco Funk', '4/4', 4, [110, 124], { H: 'x+O+ x+O+ x+O+ x+O+', K: 'X... X... X... X...', S: '.g.. X..g .g.. X...' }),
   T('funk', 'New Orleans Funk', '4/4', 4, [90, 110], { H: 'x.x. x.x. x.x. x.x.', K: 'X..X ...X ..X. ..X.', S: '..g. X.g. .gg. X..g' }, { swing: 0.3 }),
-  T('funk', 'Funk in Five', '5/4', 4, [90, 108], { H: 'x+v+ x+v+ x+v+ x+v+ x+v+', K: 'X..o ..X. .... X... ..o.', S: '.g.. X..g ..g. .... X...' }),
 
   // ---------- MORE SOUL ----------
   T('soul', 'Stax Backbeat', '4/4', 2, [96, 120], { H: 'xv xv xv xv', K: 'X. .. X. .o', S: '.. X. .. X.' }, { lay: 12 }),
@@ -634,17 +636,14 @@ const TEMPLATES = [
   T('reggae', 'Dub Groove', '4/4', 4, [64, 80], { H: 'x.v+ x.v+ x.v+ x.v+', K: '.... .... X... ....', S: '.... .... X... ...+' }, { swing: 0.35 }),
   T('reggae', 'Triplet One Drop', '4/4', 3, [66, 84], { H: 'x.x x.x x.x x.x', K: '... ... X.. ...', S: '... ... X.. ...' }),
   T('reggae', 'Lovers Rock', '4/4', 4, [76, 92], { H: 'x.v. x.v. x.v. x.v.', K: 'X... .... X... ....', S: '.... X... .... X...' }, { snare: 'xstick' }),
-  T('reggae', 'Nyabinghi Toms', '4/4', 4, [70, 90], { T2: 'X... .... X... ....', T1: '..x. x.x. ..x. x.x.', K: 'X... .... X... ....' }),
   T('reggae', 'Reggae Waltz', '3/4', 4, [70, 90], { H: 'x.v. x.v. x.v.', K: '.... .... X...', S: '.... .... X...' }, { swing: 0.35 }),
 
   // ---------- MORE LATIN ----------
-  T('latin', 'Songo', '4/4', 4, [100, 124], { R: 'x.xx x.x. xx.x x.x.', K: '...X ..X. ...X ..X.', S: '..x. ...x .x.. x..x' }, { snare: 'xstick' }),
   T('latin', 'Mambo', '4/4', 2, [170, 210], { R: 'b. b. b. b.', K: '.. .X .. .X', S: '.. .. x. ..' }),
   T('latin', 'Rumba Clave Groove', '4/4', 4, [100, 120], { H: 'x.v. x.v. x.v. x.v.', K: 'X... ..X. X... ..X.', S: 'x..x ...x ..x. x...' }),
   T('latin', 'Merengue', '4/4', 2, [130, 160], { H: 'xv xv xv xv', K: 'X. X. X. X.', S: '.x .x .x xx' }),
   T('latin', 'Cumbia', '4/4', 2, [88, 110], { H: '.x .x .x .x', K: 'X. .. X. ..', S: '.. x. .. x.' }),
   T('latin', 'Bolero', '4/4', 4, [68, 88], { H: 'x.v. x.v. x.v. x.v.', K: 'X... .... X... ....', S: '.... x... ..xx x...' }),
-  T('latin', 'Partido Alto', '4/4', 4, [92, 112], { H: 'x+v+ x+v+ x+v+ x+v+', K: 'X..x X..x X..x X..x', S: '.x.. x..x .x.. x...' }),
   T('latin', 'Latin Rock', '4/4', 4, [100, 124], { R: 'b.b. b.b. b.b. b.b.', K: 'X..X ..X. X..X ..X.', S: '.... X... .... X...' }),
 
   // ---------- MORE HEAVY ----------
@@ -652,10 +651,144 @@ const TEMPLATES = [
   T('heavy', 'Thrash Beat', '4/4', 2, [170, 220], { H: 'Xx Xx Xx Xx', K: 'X. X. X. X.', S: '.X .X .X .X' }),
   T('heavy', 'Sludge Half-Time', '4/4', 4, [58, 80], { R: 'x... x... x... x...', K: 'X... .... ..X. ....', S: '.... .... X... ....' }),
   T('heavy', 'Groove Metal', '4/4', 4, [90, 120], { R: 'x.v. x.v. x.v. x.v.', K: 'X.XX ..X. X.XX ..X.', S: '.... X... .... X...' }),
-  T('heavy', 'Djent Syncopation', '4/4', 4, [110, 140], { H: 'x... x... x... x...', K: 'X..X ..X. .X.. X...', S: '.... .... X... ....' }),
   T('heavy', 'Heavy Waltz', '3/4', 4, [100, 140], { R: 'x.v. x.v. x.v.', K: 'X.X. .... ....', S: '.... X... X...' }),
   T('heavy', 'Doom in Six', '6/8', 3, [50, 70], { R: 'xvv xvv', K: 'X.X ...', S: '... X..' }),
   T('heavy', 'Stoner Shuffle', '4/4', 3, [66, 86], { R: 'x.x x.x x.x x.x', K: 'X.. ..X ... ..x', S: '... ... X.. ...' }),
+
+  // ---------- EVEN MORE ROCK ----------
+  T('rock', 'Garage Rock', '4/4', 2, [130, 170], { H: 'Xx Xx Xx Xx', K: 'X. .o X. .o', S: '.. X. .. X.' }),
+  T('rock', 'Rock Pickup', '4/4', 4, [100, 130], { H: 'x.v. x.v. x.v. x.v.', K: 'X... ..X. X... ..X.', S: '.... X... .... X...' }),
+  T('rock', 'Simple Stomp', '4/4', 4, [88, 116], { H: 'x.v. x.v. x.v. x.v.', K: 'X... .... X... ....', S: '.... X... .... X...' }),
+  T('rock', 'Open-Hat Push', '4/4', 4, [110, 140], { H: 'x.v. x.v. x.v. x.O.', K: 'X... ..o. X.X. ....', S: '.... X... .... X...' }),
+  T('rock', 'Ride Bell Rock', '4/4', 4, [100, 135], { R: 'b.v. b.v. b.v. b.v.', K: 'X... ..o. X... ..o.', S: '.... X... .... X...' }),
+  T('rock', 'Sixteenth-Kick Rock', '4/4', 4, [90, 120], { H: 'x.v. x.v. x.v. x.v.', K: 'X..X ..X. X..X ....', S: '.... X... .... X...' }),
+  T('rock', 'Rock Shuffle', '4/4', 3, [90, 120], { H: 'x.x x.x x.x x.x', K: 'X.. ..x X.. ...', S: '... X.. ... X..' }),
+  T('rock', 'Double-Snare Rock', '4/4', 4, [100, 130], { H: 'x.v. x.v. x.v. x.v.', K: 'X... ..o. X... ....', S: '.... X... .... X.X.' }),
+  T('rock', 'Slow Rock on the Ride', '12/8', 3, [56, 76], { R: 'xvv xvv xvv xvv', K: 'X.. ..o X.. ...', S: '... X.. ... X..' }),
+  T('rock', 'Ride Waltz', '3/4', 2, [120, 160], { R: 'xv xv xv', K: 'X. .o ..', S: '.. X. X.' }),
+  T('rock', 'Southern Rock', '4/4', 2, [90, 120], { H: 'xv xv xv xv', K: 'X. .x X. .o', S: '.. X. .. X.' }, { swing: 0.4 }),
+  T('rock', 'Arena Half-Time', '4/4', 4, [140, 170], { R: 'x.v. x.v. x.v. x.v.', K: 'X... .... ..X. ....', S: '.... .... X... ....' }),
+
+  // ---------- EVEN MORE BLUES ----------
+  T('blues', 'Slow Shuffle on the Ride', '12/8', 3, [50, 70], { R: 'x.x x.x x.x x.x', K: 'X.. ..o X.. ..o', S: '... X.. ... X..', P: '... x.. ... x..' }),
+  T('blues', 'Blues Shuffle Backbeat', '4/4', 2, [100, 130], { H: 'Xv xv Xv xv', K: 'X. .o X. .o', S: '.. X. .. X.' }, { swing: 0.75 }),
+  T('blues', 'Double Shuffle', '4/4', 2, [110, 140], { H: 'xv xv xv xv', K: 'X. X. X. X.', S: '.g X. .g X.' }, { swing: 0.75 }),
+  T('blues', 'Swamp Blues', '4/4', 2, [80, 100], { H: 'xv xv xv xv', K: 'X. .. X. .x', S: '.. X. .. X.' }, { swing: 0.7 }),
+  T('blues', 'Blues Train', '4/4', 2, [120, 150], { S: 'ss Xs ss Xs', K: 'X. .. X. ..' }, { swing: 0.74, snare: 'auto' }),
+  T('blues', 'Slow Blues Straight', '4/4', 4, [60, 80], { H: 'x.v. x.v. x.v. x.v.', K: 'X... .... X..o ....', S: '.... X... .... X...' }),
+  T('blues', 'Blues Waltz on the Ride', '3/4', 2, [90, 130], { R: 'xv xv xv', K: 'X. .. ..', S: '.. X. X.' }, { swing: 0.72 }),
+  T('blues', 'Texas Blues', '4/4', 2, [110, 140], { R: 'xv xv xv xv', K: 'X. .o X. .o', S: '.. X. .g X.' }, { swing: 0.7 }),
+  T('blues', 'Chicago Straight Eighths', '4/4', 2, [100, 130], { H: 'xv xv xv xv', K: 'X. .. X. ..', S: '.. X. .. X.' }),
+  T('blues', 'Floor Tom Shuffle', '4/4', 2, [90, 120], { T2: 'xv xv xv xv', K: 'X. .. X. ..', S: '.. X. .. X.' }, { swing: 0.74 }),
+  T('blues', 'Slow Blues on the Hats', '12/8', 3, [44, 62], { H: 'x.x x.x x.x x.x', K: 'X.. ... X.. ...', S: '... X.. ... X..' }),
+  T('blues', 'Blues Two-Beat', '4/4', 2, [130, 160], { H: 'xv xv xv xv', K: 'X. .. X. ..', S: '.. x. .. x.' }, { swing: 0.7 }),
+
+  // ---------- EVEN MORE SHUFFLE ----------
+  T('shuffle', 'Ghost-Note Shuffle', '4/4', 3, [80, 100], { H: 'x.x x.x x.x x.x', K: 'X.. ..x X.. ...', S: '.g. X.g .g. X.g' }),
+  T('shuffle', 'Swing Backbeat Shuffle', '4/4', 2, [110, 140], { H: 'xv xv xv xv', K: 'X. .. X. ..', S: '.. X. .. X.' }, { swing: 0.72 }),
+  T('shuffle', 'Boogie on the Ride', '4/4', 2, [130, 165], { R: 'xv xv xv xv', K: 'X. .x X. .x', S: '.. X. .. X.' }, { swing: 0.76 }),
+  T('shuffle', 'Half-Time Ride Shuffle', '4/4', 3, [70, 90], { R: 'x.x x.x x.x x.x', K: 'X.. ... ..x ...', S: '.g. .g. X.g .g.' }),
+  T('shuffle', 'Shuffle Train', '4/4', 2, [130, 170], { S: 'ss Xs ss Xs', K: 'X. .. X. ..' }, { swing: 0.74, snare: 'auto' }),
+  T('shuffle', 'Four-on-the-Floor Shuffle', '4/4', 2, [110, 140], { H: 'xv xv xv xv', K: 'X. X. X. X.', S: '.. X. .. X.' }, { swing: 0.74 }),
+  T('shuffle', 'Slow Twelve on the Ride', '12/8', 3, [56, 76], { R: 'x.x x.x x.x x.x', K: 'X.. ..o X.. ...', S: '... X.. ... X.g' }),
+  T('shuffle', 'Open-Hat Shuffle', '4/4', 2, [110, 140], { H: 'xv xQ xv xQ', K: 'X. .o X. .o', S: '.. X. .. X.' }, { swing: 0.72 }),
+  T('shuffle', 'Jump Shuffle', '4/4', 2, [150, 190], { R: 'x. xx x. xx', K: 'X. .. X. ..', S: '.. X. .. X.', P: '.. x. .. x.' }, { swing: 0.7 }),
+  T('shuffle', 'Lazy Shuffle', '4/4', 2, [80, 100], { H: 'xv xv xv xv', K: 'X. .. .o ..', S: '.. X. .. X.' }, { swing: 0.78 }),
+  T('shuffle', 'Shuffle Waltz on the Ride', '3/4', 2, [110, 150], { R: 'xv xv xv', K: 'X. .. ..', S: '.. X. X.' }, { swing: 0.72 }),
+  T('shuffle', 'Tom Shuffle Stomp', '4/4', 2, [100, 130], { T2: 'Xv xv Xv xv', K: 'X. .. X. ..', S: '.. X. .. X.' }, { swing: 0.75 }),
+
+  // ---------- EVEN MORE COUNTRY ----------
+  T('country', 'Bakersfield Shuffle', '4/4', 2, [120, 150], { H: 'xv xv xv xv', K: 'X. .. X. ..', S: '.. X. .. X.' }, { swing: 0.7, snare: 'auto' }),
+  T('country', 'Two-Step on the Ride', '4/4', 2, [150, 200], { R: 'xv xv xv xv', K: 'X. .. X. ..', S: '.. x. .. x.' }),
+  T('country', 'Outlaw Country', '4/4', 2, [100, 130], { H: 'xv xv xv xv', K: 'X. .o X. ..', S: '.. X. .. X.' }, { snare: 'auto' }),
+  T('country', 'Cross-Stick Waltz', '3/4', 2, [100, 140], { H: 'xv xv xv', K: 'X. .. ..', S: '.. x. x.' }, { snare: 'xstick' }),
+  T('country', 'Modern Country', '4/4', 4, [100, 125], { H: 'x.v. x.v. x.v. x.v.', K: 'X... ..X. X... ....', S: '.... X... .... X...' }, { snare: 'auto' }),
+  T('country', 'Country Gallop', '4/4', 4, [110, 140], { H: 'x.v. x.v. x.v. x.v.', K: 'X.XX .... X.XX ....', S: '.... X... .... X...' }, { snare: 'auto' }),
+
+  // ---------- EVEN MORE JAZZ ----------
+  T('jazz', 'Ballad Two-Feel', '4/4', 2, [60, 90], { R: 'x. xx x. xx', P: '.. x. .. x.', K: 'G. .. G. ..' }, { swing: 0.72 }),
+  T('jazz', 'Medium Swing Comping', '4/4', 2, [120, 170], { R: 'x. xx x. xx', P: '.. x. .. x.', K: 'G. G. G. G.', S: '.. .g .o ..' }, { swing: 0.7 }),
+  T('jazz', 'Swing Backbeat', '4/4', 2, [110, 150], { R: 'x. xx x. xx', K: 'X. .. X. ..', S: '.. X. .. X.', P: '.. x. .. x.' }, { swing: 0.7, snare: 'auto' }),
+  T('jazz', 'Latin Jazz', '4/4', 4, [100, 130], { R: 'x.xx x.x. x.xx x.x.', K: '...X ..X. ...X ..X.', S: 'x..x ...x ..x. x...' }, { snare: 'xstick' }),
+  T('jazz', 'Waltz Comping', '3/4', 2, [120, 170], { R: 'x. xx x.', P: '.. x. x.', K: 'G. .. ..', S: '.. .g .o' }, { swing: 0.7 }),
+  T('jazz', 'Slow Jazz Waltz', '3/4', 2, [80, 110], { R: 'x. xx xx', P: '.. x. ..', K: 'G. .. ..' }, { swing: 0.7 }),
+  T('jazz', 'Bossa on the Ride', '4/4', 2, [120, 150], { R: 'xv xv xv xv', K: 'X. .x X. .x', S: 'x. .x .. x.' }, { snare: 'xstick' }),
+  T('jazz', 'Up-Tempo Two', '4/4', 2, [200, 260], { R: 'x. xx x. xx', P: '.. x. .. x.', K: 'G. .. G. ..' }, { swing: 0.6 }),
+  T('jazz', 'Hard Swing', '4/4', 2, [140, 190], { R: 'x. xx x. xx', K: 'G. G. G. G.', S: '.x .. .x x.', P: '.. x. .. x.' }, { swing: 0.7 }),
+  T('jazz', 'Soul Jazz', '4/4', 2, [100, 130], { R: 'x. xx x. xx', K: 'X. .x X. ..', S: '.. X. .. X.' }, { swing: 0.66, snare: 'auto' }),
+
+  // ---------- EVEN MORE FUNK ----------
+  T('funk', 'Funk Backbeat', '4/4', 4, [96, 112], { H: 'x+v+ x+v+ x+v+ x+v+', K: 'X..X ..X. ..X. ....', S: '.... X... .... X...' }),
+  T('funk', 'Syncopated Funk', '4/4', 4, [92, 108], { H: 'x+v+ x+v+ x+v+ x+v+', K: 'X... ...X ..X. .X..', S: '.g.. X..g .g.. X.g.' }),
+  T('funk', 'Open-Hat Funk', '4/4', 4, [96, 112], { H: 'x+O+ x+v+ x+O+ x+v+', K: 'X..X ..X. .... ..X.', S: '.... X... .... X...' }),
+  T('funk', 'Funk on the Ride', '4/4', 4, [90, 108], { R: 'x.v. x.v. x.v. x.v.', K: 'X... ..X. ..X. ....', S: '.g.. X..g .g.. X...' }),
+  T('funk', 'Sixteenth-Kick Funk', '4/4', 4, [90, 104], { H: 'x.v. x.v. x.v. x.v.', K: 'X.XX ..X. .XX. ..X.', S: '.... X... .... X...' }),
+  T('funk', 'Laid-Back Funk', '4/4', 4, [80, 96], { H: 'x+v+ x+v+ x+v+ x+v+', K: 'X... ..X. X... ..o.', S: '..g. X..g ..g. X...' }, { lay: 10 }),
+  T('funk', 'Half-Time Funk Shuffle', '4/4', 4, [80, 96], { H: 'x+v+ x+v+ x+v+ x+v+', K: 'X..o .... ..X. ....', S: '.g.g .g.g X.g. .g.g' }, { swing: 0.5 }),
+  T('funk', 'Bouncy Funk', '4/4', 4, [100, 116], { H: 'xvxv xvxv xvxv xvxv', K: 'X..X ...X ..X. ....', S: '.... X... ..g. X...' }),
+  T('funk', 'Tight Funk', '4/4', 4, [96, 110], { H: 'x.x. x.x. x.x. x.x.', K: 'X... ..X. ..X. ....', S: '.... X..g .... X..g' }),
+  T('funk', 'Slow Funk', '4/4', 4, [72, 86], { H: 'x+v+ x+v+ x+v+ x+v+', K: 'X... ..X. .X.. ..o.', S: '..g. X..g .g.. X..g' }),
+
+  // ---------- EVEN MORE SOUL ----------
+  T('soul', 'Motown Four-Floor', '4/4', 2, [110, 130], { H: 'xv xv xv xv', K: 'X. X. X. X.', S: 'X. X. X. X.' }),
+  T('soul', 'Soul Backbeat', '4/4', 4, [88, 108], { H: 'x.v. x.v. x.v. x.v.', K: 'X... ..X. X... ....', S: '.... X... .... X...' }),
+  T('soul', 'Memphis Soul', '4/4', 2, [90, 110], { H: 'xv xv xv xv', K: 'X. .x .. X.', S: '.. X. .. X.' }, { lay: 10 }),
+  T('soul', 'Soul Shuffle', '4/4', 2, [90, 115], { H: 'xv xv xv xv', K: 'X. .o X. .o', S: '.. X. .. X.' }, { swing: 0.7 }),
+  T('soul', 'Slow Soul Groove', '4/4', 4, [64, 80], { H: 'x.v. x.v. x.v. x.v.', K: 'X... .... X..X ....', S: '.... X... .... X...' }),
+  T('soul', 'Soul Twelve', '12/8', 3, [50, 70], { H: 'x.x x.x x.x x.x', K: 'X.. ..o X.. ...', S: '... X.. ... X..' }),
+  T('soul', 'Philly on the Ride', '4/4', 4, [100, 116], { R: 'x.v. x.v. x.v. x.v.', K: 'X... ..X. X... ..o.', S: '.... X... .... X...' }),
+  T('soul', 'R&B Groove', '4/4', 4, [84, 100], { H: 'x.v+ x.v+ x.v+ x.v+', K: 'X... ..X. ..X. .o..', S: '.... X... .... X..g' }, { swing: 0.35 }),
+  T('soul', 'Soul Half-Time', '4/4', 4, [130, 160], { H: 'x.v. x.v. x.v. x.v.', K: 'X... ..o. .... ....', S: '.... .... X... ....' }),
+  T('soul', 'Gospel in Six', '6/8', 3, [60, 80], { H: 'xvv xvv', K: 'X.. ..o', S: '... X.g' }),
+  T('soul', 'Soul Ballad on the Ride', '4/4', 4, [60, 76], { R: 'x.v. x.v. x.v. x.v.', K: 'X... .... ..X. ....', S: '.... X... .... X...' }),
+  T('soul', 'Uptown Soul', '4/4', 2, [120, 140], { H: 'Xv xv Xv xv', K: 'X. .o X. .o', S: '.. X. .. X.' }),
+
+  // ---------- EVEN MORE POP ----------
+  T('pop', 'Pop Four-on-the-Floor', '4/4', 4, [115, 128], { H: 'x.v. x.v. x.v. x.v.', K: 'X... X... X... X...', S: '.... X... .... X...' }),
+  T('pop', 'Pop Ballad on the Ride', '4/4', 4, [64, 84], { R: 'x.v. x.v. x.v. x.v.', K: 'X... .... ..X. ....', S: '.... X... .... X...' }),
+  T('pop', 'Bouncy Pop', '4/4', 4, [100, 120], { H: 'x.v. x.v. x.v. x.v.', K: 'X..X ..X. X... ....', S: '.... X... .... X...' }),
+  T('pop', 'Half-Time Ride Pop', '4/4', 4, [140, 170], { R: 'x.v. x.v. x.v. x.v.', K: 'X... ..o. .... ....', S: '.... .... X... ....' }),
+  T('pop', 'Open-Hat Pop', '4/4', 4, [100, 124], { H: 'x.O. x.O. x.O. x.O.', K: 'X... ..X. X... ....', S: '.... X... .... X...' }),
+  T('pop', 'Pop Shuffle on the Ride', '4/4', 4, [90, 108], { R: 'x.v+ x.v+ x.v+ x.v+', K: 'X... ..X. X... ....', S: '.... X... .... X...' }, { swing: 0.45 }),
+  T('pop', 'Upbeat Pop', '4/4', 2, [130, 150], { H: 'xv xv xv xv', K: 'X. .x X. .x', S: '.. X. .. X.' }),
+  T('pop', 'Pop Rock Anthem', '4/4', 4, [110, 130], { H: 'xvxv xvxv xvxv xvxv', K: 'X... ..X. X... ..X.', S: '.... X... .... X...' }),
+  T('pop', 'Pop Twelve', '12/8', 3, [56, 72], { H: 'xvv xvv xvv xvv', K: 'X.. ... X.. ..o', S: '... X.. ... X..' }),
+  T('pop', 'Sparse Pop', '4/4', 4, [80, 100], { H: 'x... x... x... x...', K: 'X... .... X... ....', S: '.... X... .... X...' }),
+  T('pop', 'Pop Waltz on the Ride', '3/4', 2, [100, 140], { R: 'xv xv xv', K: 'X. .. ..', S: '.. X. X.' }),
+
+  // ---------- EVEN MORE REGGAE ----------
+  T('reggae', 'One Drop on the Ride', '4/4', 4, [66, 84], { R: 'x.v. x.v. x.v. x.v.', K: '.... .... X... ....', S: '.... .... X... ....' }, { swing: 0.4 }),
+  T('reggae', 'Rockers on the Hats', '4/4', 4, [74, 92], { H: 'x.v. x.v. x.v. x.v.', K: 'X... X... X... X...', S: '.... .... X... ....' }, { swing: 0.3 }),
+  T('reggae', 'Steppers on the Ride', '4/4', 4, [118, 134], { R: 'x.v. x.v. x.v. x.v.', K: 'X... X... X... X...', S: '.... X... .... X...' }),
+  T('reggae', 'Ska on the Ride', '4/4', 2, [140, 180], { R: '.x .x .x .x', K: 'X. .. X. ..', S: '.. X. .. X.' }),
+  T('reggae', 'Two-Tone Ska', '4/4', 2, [150, 180], { H: '.x .x .x .x', K: 'X. X. X. X.', S: '.. X. .. X.' }),
+  T('reggae', 'Roots Reggae', '4/4', 4, [70, 86], { H: 'x.v+ x.v+ x.v+ x.v+', K: '.... .... X... ....', S: '.... .... X... ...g' }, { swing: 0.4 }),
+  T('reggae', 'Reggae Pop', '4/4', 4, [84, 100], { H: 'x.v. x.v. x.v. x.v.', K: 'X... .... X... ....', S: '.... .... X... ....' }, { swing: 0.3 }),
+  T('reggae', 'Dancehall', '4/4', 4, [90, 104], { H: 'x.v. x.v. x.v. x.v.', K: 'X..X ..X. X..X ..X.', S: '.... X... .... X...' }),
+  T('reggae', 'Rocksteady on the Ride', '4/4', 2, [70, 92], { R: 'xv xv xv xv', K: 'X. .. .. ..', S: '.. X. .. X.' }, { swing: 0.3 }),
+
+  // ---------- EVEN MORE LATIN ----------
+  T('latin', 'Bossa Nova on the Ride', '4/4', 2, [118, 150], { R: 'xv xv xv xv | xv xv xv xv', K: 'X. .x X. .x | X. .x X. .x', S: 'x. .x .. x. | .. x. .x ..' }, { bars: 2 }),
+  T('latin', 'Samba on the Ride', '4/4', 4, [92, 112], { R: 'x+v+ x+v+ x+v+ x+v+', K: 'X..x X..x X..x X..x', S: 'x.xx .x.x x.x. xx.x' }),
+  T('latin', 'Cha-Cha on the Hats', '4/4', 2, [110, 130], { H: 'xv xv xv xv', K: 'X. .. X. ..', S: '.. .. .. xx' }),
+  T('latin', 'Latin Pop', '4/4', 4, [96, 116], { H: 'x.v. x.v. x.v. x.v.', K: 'X..X ..X. X..X ..X.', S: '.... X... .... X...' }),
+  T('latin', 'Bolero on the Ride', '4/4', 4, [68, 88], { R: 'x.v. x.v. x.v. x.v.', K: 'X... .... X... ....', S: '.... x... ..xx x...' }),
+  T('latin', 'Cumbia on the Ride', '4/4', 2, [88, 110], { R: '.x .x .x .x', K: 'X. .. X. ..', S: '.. x. .. x.' }),
+  T('latin', 'Salsa Bell', '4/4', 2, [170, 200], { R: 'b. bb b. bb', K: '.. .X .. .X', S: '.. .. x. ..' }),
+  T('latin', 'Latin Rock on the Ride', '4/4', 4, [100, 124], { R: 'x.v. x.v. x.v. x.v.', K: 'X..X ..X. X..X ..X.', S: '.... X... .... X...' }),
+  T('latin', 'Merengue on the Ride', '4/4', 2, [130, 160], { R: 'xv xv xv xv', K: 'X. X. X. X.', S: '.x .x .x xx' }),
+
+  // ---------- EVEN MORE HEAVY ----------
+  T('heavy', 'Metal Drive', '4/4', 4, [140, 180], { R: 'x.v. x.v. x.v. x.v.', K: 'X.X. X.X. X.X. X.X.', S: '.... X... .... X...' }),
+  T('heavy', 'Hard Rock Pound', '4/4', 4, [100, 130], { H: 'X.x. X.x. X.x. X.x.', K: 'X... ..X. X... ....', S: '.... X... .... X...' }),
+  T('heavy', 'Heavy Half-Time on the Hats', '4/4', 4, [120, 160], { H: 'x.v. x.v. x.v. x.v.', K: 'X.o. .... ..X. ....', S: '.... .... X... ....' }),
+  T('heavy', 'Punk Beat', '4/4', 2, [180, 220], { H: 'Xx Xx Xx Xx', K: 'X. X. X. X.', S: '.. X. .. X.' }),
+  T('heavy', 'Gallop on the Ride', '4/4', 4, [130, 170], { R: 'x... x... x... x...', K: 'X.XX X.XX X.XX X.XX', S: '.... X... .... X...' }),
+  T('heavy', 'Grunge', '4/4', 4, [100, 130], { H: 'x.v. x.v. x.v. x.v.', K: 'X... ..X. ..X. ....', S: '.... X... .... X...' }, { lift: true }),
+  T('heavy', 'Heavy Shuffle', '4/4', 3, [80, 100], { R: 'x.x x.x x.x x.x', K: 'X.. ..X X.. ...', S: '... X.. ... X..' }),
+  T('heavy', 'Breakdown', '4/4', 4, [100, 130], { R: 'x... x... x... x...', K: 'X..X ..X. X..X ....', S: '.... .... X... ....' }),
+  T('heavy', 'Heavy Toms', '4/4', 4, [100, 130], { T2: 'X.x. X.x. X.x. X.x.', K: 'X... ..X. X... ....', S: '.... X... .... X...' }),
+  T('heavy', 'Hard Rock on the Ride', '4/4', 4, [110, 140], { R: 'X.v. X.v. X.v. X.v.', K: 'X... ..X. X.X. ....', S: '.... X... .... X...' }),
 
   // ---------- TOM GROOVES (time kept on the toms) ----------
   T('rock', 'Tribal Toms', '4/4', 4, [96, 130], { T2: 'x.vx ..v. x.vx ....', T1: '.... .... .... ..x+', K: 'X... ..X. X... ..o.', S: '.... X... .... X...' }),
@@ -676,32 +809,27 @@ const FALLBACK = {
     '3/4': F(2, [100, 150], { H: 'xv xv xv', K: 'X. .. .o', S: '.. X. X.' }),
     '6/8': F(3, [52, 78], { H: 'xvv xvv', K: 'X.. ..o', S: '... X..' }),
     '12/8': F(3, [54, 74], { H: 'xvv xvv xvv xvv', K: 'X.. ... X.o ...', S: '... X.. ... X.g' }),
-    '5/4': F(4, [100, 140], { H: 'x.v. x.v. x.v. x.v. x.v.', K: 'X... .... ..o. X... ....', S: '.... .... X... .... X...' }),
   },
   shuffle: {
     '3/4': F(2, [110, 150], { H: 'xv xv xv', K: 'X. .. .o', S: '.. X. X.' }, { swing: 0.75 }),
     '6/8': F(3, [44, 68], { R: 'xvv xvv', K: 'X.. ..o', S: '... X..' }),
     '12/8': F(3, [56, 80], { H: 'x.x x.x x.x x.x', K: 'X.. ..o X.. ..o', S: '... X.. ... X..' }),
-    '5/4': F(2, [100, 140], { H: 'xv xv xv xv xv', K: 'X. .. .o X. ..', S: '.. .. X. .. X.' }, { swing: 0.72 }),
     '4/4': F(2, [110, 140], { H: 'xv xv xv xv', K: 'X. .o X. .o', S: '.. X. .. X.' }, { swing: 0.75 }),
   },
   country: {
     '3/4': F(2, [90, 150], { H: 'xo xo xo', K: 'X. .. ..', S: '.. x. x.' }),
     '6/8': F(3, [50, 76], { H: 'xvv xvv', K: 'X.. ...', S: '... x..' }),
     '12/8': F(3, [54, 76], { H: 'xvv xvv xvv xvv', K: 'X.. ... X.. ...', S: '... x.. ... x..' }),
-    '5/4': F(2, [100, 140], { H: 'xo xo xo xo xo', K: 'X. .. X. .. ..', S: '.. x. .. x. x.' }),
   },
   jazz: {
     '3/4': F(2, [120, 180], { R: 'x. xx x.', P: '.. x. x.', K: 'G. .. ..', S: '.. .o .+' }, { swing: 0.7 }),
     '6/8': F(3, [80, 110], { R: 'b.b b.b', P: '... x..', K: 'X.. ...', S: '... ..o' }),
     '12/8': F(3, [90, 120], { R: 'b.b .bb .b. b.b', K: 'X.. ..o X.. ..o', P: '... x.. ... x..', S: '... ... ... x..' }),
-    '5/4': F(2, [150, 190], { R: 'x. xx x. xx x.', P: '.. x. .. x. ..', K: 'G. .. .. G. ..', S: '.. .. .o .+ ..' }, { swing: 0.68 }),
   },
   funk: {
     '3/4': F(4, [86, 106], { H: 'x+v+ x+v+ x+v+', K: 'X..o ..X. ....', S: '.g.. X..g ..X.' }),
     '6/8': F(3, [60, 82], { H: 'xvv xvv', K: 'X.o ..o', S: '.g. X.g' }),
     '12/8': F(3, [60, 82], { H: 'xvv xvv xvv xvv', K: 'X.. ..o .o. ...', S: '.g. X.g .g. X.g' }),
-    '5/4': F(4, [90, 110], { H: 'x+v+ x+v+ x+v+ x+v+ x+v+', K: 'X..o ..X. ..o. .... X...', S: '.g.. X..g .... X..g ....' }),
   },
   reggae: {
     '3/4': F(4, [70, 90], { H: 'x.v. x.v. x.v.', K: '.... .... X...', S: '.... .... X...' }, { swing: 0.35 }),
@@ -711,7 +839,7 @@ const FALLBACK = {
     '12/8': F(3, [92, 120], { R: 'b.b .bb .b. b.b', K: 'X.. ..o X.. ..o', P: '... x.. ... x..', S: '... ... .o. x..' }),
   },
 };
-const METER_NAME = { '4/4': 'in 4', '3/4': 'Waltz', '6/8': 'in Six', '12/8': 'in Twelve', '5/4': 'in Five' };
+const METER_NAME = { '4/4': 'in 4', '3/4': 'Waltz', '6/8': 'in Six', '12/8': 'in Twelve' };
 
 function parseTemplate(tp) {
   const beats = METERS[tp.meter].beats, bars = tp.bars || 1, len = beats * tp.sub;
@@ -779,7 +907,7 @@ function snareArt(mode, ch, I) {
   }
 }
 
-const BASE_VEL = { X: 1, x: 0.82, v: 0.68, o: 0.76, '+': 0.62, g: 0.2, G: 0.2, O: 0.8, Q: 0.76, b: 0.85 };
+const BASE_VEL = { X: 1, x: 0.82, s: 0.36, v: 0.68, o: 0.76, '+': 0.62, g: 0.2, G: 0.2, O: 0.8, Q: 0.76, b: 0.85 };
 const LANES = ['K', 'S', 'H', 'R', 'P', 'T1', 'T2', 'Q'];
 
 /**
@@ -960,7 +1088,7 @@ function addFill(ev, st, barNo, beats, vmul) {
 }
 
 // ---------- randomizer ----------
-const METER_WEIGHTS = { '4/4': 0.64, '12/8': 0.13, '3/4': 0.13, '6/8': 0.10, '5/4': 0 };
+const METER_WEIGHTS = { '4/4': 0.64, '12/8': 0.13, '3/4': 0.13, '6/8': 0.10 };
 function weighted(rnd, entries) {
   const tot = entries.reduce((a, [, w]) => a + w, 0);
   let x = rnd() * tot;
@@ -1009,6 +1137,11 @@ const SOUNDS = {
 const SOUND_ORDER = ['arena', 'stadium', 'garage', 'warm', 'vintage', 'tight', 'fat', 'club', 'slap', 'plate', 'dub', 'live', 'ballad'];
 const STYLE_SOUND = { rock: 'arena', heavy: 'stadium', blues: 'warm', shuffle: 'warm', country: 'slap', jazz: 'club', funk: 'tight', soul: 'vintage', pop: 'plate', reggae: 'dub', latin: 'live' };
 const GROOVE_SOUND = {
+  'Train Beat': 'slap', 'Pickup Train Beat': 'slap', 'Echo Train Beat': 'slap', 'Double-Accent Train Beat': 'slap', 'Pushed Train Beat': 'slap',
+  'Train Beat with Hat Foot': 'slap', 'Straight Train Beat': 'live', 'Sixteenth Train Beat': 'slap', 'Garage Rock': 'garage', 'Punk Beat': 'garage',
+  'Grunge': 'garage', 'Metal Drive': 'stadium', 'Breakdown': 'stadium', 'Arena Half-Time': 'stadium', 'Southern Rock': 'warm', 'Swamp Blues': 'warm',
+  'Memphis Soul': 'vintage', 'Motown Four-Floor': 'vintage', 'Tight Funk': 'tight', 'Laid-Back Funk': 'fat', 'Slow Funk': 'fat', 'Two-Tone Ska': 'garage',
+  'Soul Ballad on the Ride': 'ballad', 'Pop Ballad on the Ride': 'ballad', 'Soul Twelve': 'ballad', 'Pop Twelve': 'ballad', 'Gospel in Six': 'ballad',
   'Thrash Beat': 'stadium', 'Sludge Half-Time': 'stadium', 'Doom in Six': 'stadium', 'Stoner Shuffle': 'garage', 'Pop Punk': 'garage',
   'Dance Pop': 'plate', 'Indie Stomp': 'garage', 'Philly Groove': 'vintage', 'Stax Backbeat': 'vintage', 'Northern Soul': 'vintage', 'Neo-Soul Pocket': 'fat',
   'Lazy Two-Beat Shuffle': 'warm', 'Rockabilly': 'slap', 'Western Swing': 'club', 'Polka Boom-Chick': 'slap', 'Country Rock': 'arena',
@@ -1448,10 +1581,9 @@ function render() {
   for (const b of $('meters').children) b.setAttribute('aria-pressed', String(b.dataset.m === S.meter));
   for (const b of $('timeSel').children) b.setAttribute('aria-pressed', String(b.dataset.t === S.time));
   $('gname').textContent = tpl.name;
-  $('gmeta').textContent = `${st.name} · ${tpl.meter}` + (list.length > 1 ? ` · ${S.gi + 1} of ${list.length}` : '');
+  $('gmeta').textContent = `${st.name} · ${tpl.meter}`;
   $('gkit').textContent = `${SOUNDS[soundFor(tpl, S.sound)].name} kit`;
-  $('prev').disabled = $('next').disabled = list.length < 2;
-  $('prev').style.visibility = $('next').style.visibility = list.length < 2 ? 'hidden' : 'visible';
+  $('styleHint').textContent = list.length > 1 ? `Tap ${st.name} again for another of its ${list.length} grooves in ${tpl.meter}.` : '';
   $('meterHint').textContent = METERS[S.meter].hint;
   $('bpm').textContent = Math.round(S.bpm);
   setRange($('intensity'), S.I); $('intensityVal').textContent = word(WORDS.I, S.I);
@@ -1496,21 +1628,22 @@ function fitTempo(tpl) {
   const [lo, hi] = tpl.tempo;
   if (S.bpm < lo * 0.92 || S.bpm > hi * 1.08) S.bpm = Math.round(lo + (hi - lo) * 0.45);
 }
+// pick a random groove in the style and time signature, never the one already playing
+function pickGroove() {
+  const L = grooveList(S.styleId, S.meter);
+  if (L.length < 2) { S.gi = 0; return; }
+  let g; do { g = Math.floor(Math.random() * L.length); } while (g === S.gi);
+  S.gi = g;
+}
 function setStyle(id) {
-  if (id === S.styleId) return;
-  S.styleId = id; S.gi = 0; S.sound = 'auto'; S.seed = (Math.random() * 1e9) | 0;
+  const same = id === S.styleId;
+  S.styleId = id; if (!same) S.gi = -1; pickGroove(); S.sound = 'auto'; S.seed = (Math.random() * 1e9) | 0;
   const tpl = tplNow(); S.swing = tpl.swing || 0; fitTempo(tpl);
   applyMix(); render();
 }
 function setMeter(m) {
   if (m === S.meter) return;
-  S.meter = m; S.gi = 0;
-  const tpl = tplNow(); S.swing = tpl.swing || 0; fitTempo(tpl);
-  render();
-}
-function stepGroove(d) {
-  const L = grooveList(S.styleId, S.meter); if (L.length < 2) return;
-  S.gi = (S.gi + d + L.length) % L.length; S.sound = 'auto';
+  S.meter = m; S.gi = -1; pickGroove();
   const tpl = tplNow(); S.swing = tpl.swing || 0; fitTempo(tpl);
   render();
 }
@@ -1571,8 +1704,6 @@ function bindRange(id, key, after) {
 
 function bindUI() {
   $('play').addEventListener('click', () => { if (!ready) return; sched.playing ? stop() : start(); });
-  $('prev').addEventListener('click', () => stepGroove(-1));
-  $('next').addEventListener('click', () => stepGroove(1));
   $('dice').addEventListener('click', randomize);
   $('slower').addEventListener('click', () => setBpm(S.bpm - 1));
   $('faster').addEventListener('click', () => setBpm(S.bpm + 1));
@@ -1603,8 +1734,6 @@ function bindUI() {
     if (e.key === ' ') { e.preventDefault(); if (ready) sched.playing ? stop() : start(); }
     else if (k === 't') tap();
     else if (k === 'r') randomize();
-    else if (e.key === 'ArrowRight') stepGroove(1);
-    else if (e.key === 'ArrowLeft') stepGroove(-1);
     else if (e.key === 'ArrowUp') { e.preventDefault(); setBpm(S.bpm + 1); }
     else if (e.key === 'ArrowDown') { e.preventDefault(); setBpm(S.bpm - 1); }
   });
