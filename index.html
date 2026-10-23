@@ -1816,6 +1816,22 @@ function setMeter(m) {
 function setBpm(v) { S.bpm = clamp(Math.round(v), 40, 260); $('bpm').textContent = S.bpm; applyMix(); save(); }
 
 // Randomize everything. With a style id (a style tap), stay in that style; otherwise pick a new one (Surprise me).
+// What each style usually keeps time on — a gentle lean, not a rule.
+// fav: grooves whose own time lane is this get picked a bit more often.
+// w: odds for [groove's own, hi-hat, ride, low tom, both toms] when rolling.
+const TIME_LEAN = {
+  rock:    { fav: 'H', w: [0.57, 0.11, 0.17, 0.06, 0.09] },
+  blues:   { fav: 'R', w: [0.57, 0.08, 0.22, 0.05, 0.08] },
+  shuffle: { fav: 'R', w: [0.57, 0.10, 0.21, 0.05, 0.07] },
+  country: { fav: 'H', w: [0.58, 0.14, 0.15, 0.05, 0.08] },
+  jazz:    { fav: 'R', w: [0.60, 0.04, 0.29, 0.03, 0.04] },
+  funk:    { fav: 'H', w: [0.58, 0.18, 0.12, 0.05, 0.07] },
+  soul:    { fav: 'H', w: [0.57, 0.15, 0.16, 0.05, 0.07] },
+  pop:     { fav: 'H', w: [0.57, 0.16, 0.14, 0.05, 0.08] },
+  reggae:  { fav: 'H', w: [0.58, 0.18, 0.12, 0.05, 0.07] },
+  latin:   { fav: 'R', w: [0.57, 0.08, 0.19, 0.06, 0.10] },
+  heavy:   { fav: 'R', w: [0.56, 0.08, 0.20, 0.07, 0.09] },
+};
 function randomize(styleId) {
   const rnd = Math.random, tri = () => (rnd() + rnd()) / 2;
   const prevName = tplNow().name;
@@ -1829,7 +1845,8 @@ function randomize(styleId) {
   }
   // hi-hat and ride grooves come up a little more often than tom grooves; never repeat the groove just played
   const L = grooveList(S.styleId, S.meter);
-  const choices = L.map((t, i) => [i, (isTomGroove(t) ? 0.8 : 1) * (t.name === prevName && L.length > 1 ? 0 : 1)]);
+  const lean = TIME_LEAN[S.styleId] || TIME_LEAN.rock;
+  const choices = L.map((t, i) => [i, (isTomGroove(t) ? 0.8 : 1) * (timeLanes(t)[0] === lean.fav ? 1.15 : 1) * (t.name === prevName && L.length > 1 ? 0 : 1)]);
   S.gi = weighted(rnd, choices);
   const tpl = tplNow();
   if (!S.locks.tempo) { const [lo, hi] = tpl.tempo; S.bpm = Math.round(lo + (hi - lo) * tri()); }
@@ -1841,7 +1858,7 @@ function randomize(styleId) {
   S.seed = (rnd() * 1e9) | 0;
   S.sound = 'auto';
   // what keeps time: usually whatever the groove calls for, sometimes ride or toms for a fresh color
-  S.time = isTomGroove(tpl) ? 'auto' : weighted(rnd, [['auto', 0.57], ['hats', 0.09], ['ride', 0.19], ['low', 0.06], ['toms', 0.09]]);
+  S.time = isTomGroove(tpl) ? 'auto' : weighted(rnd, ['auto', 'hats', 'ride', 'low', 'toms'].map((m, k) => [m, lean.w[k]]));
   S.extras = !!(tpl.perc || STYLE_BY_ID[tpl.style].perc) && rnd() < 0.35;
   applyMix(); render();
   if (sched.playing) restartNow();
