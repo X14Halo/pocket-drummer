@@ -328,7 +328,7 @@ footer a { color: var(--mute); }
       <div class="beats" id="beats" aria-hidden="true"></div>
       <div class="legend" aria-hidden="true"><span class="k">kick</span><span class="s">snare</span><span class="t">toms</span><span class="h">hats · ride</span></div>
       <div class="groove-row">
-        <div class="groove-name"><h1 id="gname">Straight Rock</h1><p id="gmeta">4/4 · 1 of 5</p><p class="gkit" id="gkit">Big room kit</p></div>
+        <div class="groove-name"><h1 id="gname">Straight Rock</h1><p id="gmeta">4/4 · 1 of 5</p><p class="gkit" id="gkit">Big room</p></div>
       </div>
       <button class="dice" id="dice">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.4" fill="currentColor" stroke="none"/></svg>
@@ -352,7 +352,7 @@ footer a { color: var(--mute); }
       </div>
 
       <div>
-        <div class="section-label"><label for="soundSel">Sound</label></div>
+        <div class="section-label"><label for="soundSel">Room &amp; reverb</label></div>
         <div class="select"><select id="soundSel"></select><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg></div>
         <div class="meter-hint" id="soundHint"></div>
       </div>
@@ -1602,7 +1602,7 @@ function buildStyles() {
   for (const st of STYLES) {
     const b = document.createElement('button');
     b.className = 'chip'; b.textContent = st.name; b.style.setProperty('--ch', st.hue); b.dataset.id = st.id;
-    b.addEventListener('click', () => setStyle(st.id));
+    b.addEventListener('click', () => randomize(st.id));
     box.appendChild(b);
   }
   const mb = $('meters');
@@ -1622,8 +1622,8 @@ function render() {
   for (const b of $('timeSel').children) b.setAttribute('aria-pressed', String(b.dataset.t === S.time));
   $('gname').textContent = tpl.name;
   $('gmeta').textContent = `${st.name} · ${tpl.meter}`;
-  $('gkit').textContent = `${SOUNDS[soundFor(tpl, S.sound)].name} kit`;
-  $('styleHint').textContent = list.length > 1 ? `Tap ${st.name} again for another of its ${list.length} grooves in ${tpl.meter}.` : '';
+  $('gkit').textContent = `${SOUNDS[soundFor(tpl, S.sound)].name} room`;
+  $('styleHint').textContent = `Tap ${st.name} again for a fresh random ${st.name.toLowerCase()} groove.`;
   $('meterHint').textContent = METERS[S.meter].hint;
   $('bpm').textContent = Math.round(S.bpm);
   setRange($('intensity'), S.I); $('intensityVal').textContent = word(WORDS.I, S.I);
@@ -1689,17 +1689,22 @@ function setMeter(m) {
 }
 function setBpm(v) { S.bpm = clamp(Math.round(v), 40, 260); $('bpm').textContent = S.bpm; applyMix(); save(); }
 
-function randomize() {
+// Randomize everything. With a style id (a style tap), stay in that style; otherwise pick a new one (Surprise me).
+function randomize(styleId) {
   const rnd = Math.random, tri = () => (rnd() + rnd()) / 2;
-  if (!S.locks.style) {
+  const prevName = tplNow().name;
+  if (styleId) S.styleId = styleId;
+  else if (!S.locks.style) {
     const others = STYLES.filter(s => s.id !== S.styleId);
     S.styleId = others[Math.floor(rnd() * others.length)].id;
   }
   if (!S.locks.meter) {
     S.meter = weighted(rnd, METER_ORDER.map(m => [m, METER_WEIGHTS[m] * (TEMPLATES.some(t => t.style === S.styleId && t.meter === m) ? 1 : 0.35)]));
   }
+  // hi-hat and ride grooves come up a little more often than tom grooves; never repeat the groove just played
   const L = grooveList(S.styleId, S.meter);
-  S.gi = Math.floor(rnd() * L.length);
+  const choices = L.map((t, i) => [i, (isTomGroove(t) ? 0.8 : 1) * (t.name === prevName && L.length > 1 ? 0 : 1)]);
+  S.gi = weighted(rnd, choices);
   const tpl = tplNow();
   if (!S.locks.tempo) { const [lo, hi] = tpl.tempo; S.bpm = Math.round(lo + (hi - lo) * tri()); }
   S.I = clamp(0.15 + 0.8 * tri(), 0, 1);
@@ -1710,11 +1715,11 @@ function randomize() {
   S.seed = (rnd() * 1e9) | 0;
   S.sound = 'auto';
   // what keeps time: usually whatever the groove calls for, sometimes ride or toms for a fresh color
-  S.time = isTomGroove(tpl) ? 'auto' : weighted(rnd, [['auto', 0.55], ['hats', 0.08], ['ride', 0.19], ['low', 0.07], ['toms', 0.11]]);
+  S.time = isTomGroove(tpl) ? 'auto' : weighted(rnd, [['auto', 0.57], ['hats', 0.09], ['ride', 0.19], ['low', 0.06], ['toms', 0.09]]);
   S.extras = !!(tpl.perc || STYLE_BY_ID[tpl.style].perc) && rnd() < 0.35;
   applyMix(); render();
   if (sched.playing) restartNow();
-  const d = $('dice'); d.classList.remove('rolling'); void d.offsetWidth; d.classList.add('rolling');
+  if (!styleId) { const d = $('dice'); d.classList.remove('rolling'); void d.offsetWidth; d.classList.add('rolling'); }
 }
 
 // tap tempo
@@ -1745,7 +1750,7 @@ function bindRange(id, key, after) {
 
 function bindUI() {
   $('play').addEventListener('click', () => { if (!ready) return; sched.playing ? stop() : start(); });
-  $('dice').addEventListener('click', randomize);
+  $('dice').addEventListener('click', () => randomize());
   $('slower').addEventListener('click', () => setBpm(S.bpm - 1));
   $('faster').addEventListener('click', () => setBpm(S.bpm + 1));
   $('tap').addEventListener('pointerdown', e => { e.preventDefault(); tap(); });
@@ -2164,6 +2169,7 @@ function applyPreset(p) {
   if (S.sound !== 'auto' && !SOUNDS[S.sound]) S.sound = 'auto';
   S.bpm = clamp(Math.round(+S.bpm || 110), 40, 260);
   applyMix(); render();
+  if (sched.playing) restartNow();   // jump straight to beat 1 of the loaded groove
   toast(`Loaded “${p.name}”`);
 }
 async function savePreset() {
