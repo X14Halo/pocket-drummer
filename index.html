@@ -988,10 +988,136 @@ function compileBar(st, barNo, crashHere) {
     }
   }
 
+  embellish(ev, st, tp, beats, barNo, I, vmul);
   applyTime(ev, st, tp, beats, I, lift, vmul);
   if (isFill) addFill(ev, st, barNo, beats, vmul);
   ev.sort((a, b) => a.t - b.t);
   return { ev, len: beats * TPB, fill: isFill, crashNext: isFill };
+}
+
+// ---------- busyness embellishments ----------
+// Upper half of the Busyness slider: what a drummer adds when asked to "play busier" —
+// subdivided hats, snare ghost notes, extra kicks. Chosen per groove seed, mostly repeating
+// bar to bar (a few notes alternate between bars) so it still sounds like a part, not noise.
+//            ghosts  kicks  hats
+const EMB = {
+  rock:    [0.55, 0.75, 0.75], blues:  [0.7, 0.45, 0.55], shuffle: [0.7, 0.5, 0.6],
+  country: [0.35, 0.45, 0.6],  jazz:   [0.45, 0.3, 0],    funk:    [1, 0.9, 1],
+  soul:    [0.8, 0.7, 0.8],    pop:    [0.5, 0.7, 0.9],   reggae:  [0.3, 0.15, 0.9],
+  latin:   [0.4, 0.45, 0.6],   heavy:  [0.25, 1, 0.6],
+};
+function embellish(ev, st, tp, beats, barNo, I, vmul) {
+  const a = clamp((st.B - 0.5) / 0.5, 0, 1);
+  if (a <= 0) return;
+  const [gAmt, kAmt, hAmt] = EMB[tp.style] || [0.5, 0.5, 0.5];
+  const sub = tp.sub, g = TPB / sub, len = beats * TPB;
+  const comp = METERS[tp.meter].comp;
+  const ratio = sub === 3 ? 0.5 : swingRatio(st.swing);
+  const swung = sub === 2 && ratio >= 0.56;
+  // value in 0..1 for a slot; ~25% of slots re-roll on alternate bars for natural variation
+  const R = (kind, t) => {
+    const alt = hash32(st.seed, kind, t, 'alt') < 0.25 ? barNo % 2 : 0;
+    return hash32(st.seed, 'emb', kind, t, alt);
+  };
+  const at = (lane, t) => ev.some(e => e.lane === lane && e.t === t);
+  const kickAt = t => ev.some(e => e.lane === 'K' && e.t === t);
+  const accents = ev.filter(e => e.lane === 'S' && (e.ch === 'X' || e.ch === 'x')).map(e => e.t);
+  const isBackbeat = t => accents.includes(t);
+  const pick = (cands, n, kind) => cands
+    .map(c => ({ ...c, k: R(kind, c.t) / c.w }))
+    .sort((x, y) => x.k - y.k).slice(0, n);
+  const slots = [];
+  for (let t = 0; t < len; t += g) slots.push(t);
+  const pos = t => t % TPB;            // position inside the beat in ticks
+
+  // --- snare ghosts ---
+  const sHits = ev.filter(e => e.lane === 'S').length;
+  const snareBusy = sHits >= slots.length * 0.5;   // train beats etc. already full
+  if (gAmt > 0 && !snareBusy && accents.length) {
+    const cands = [];
+    for (const t of slots) {
+      if (pos(t) === 0 || at('S', t) || kickAt(t)) continue;
+      if (isBackbeat(t - g)) continue;             // keep the note right after the backbeat clean
+      let w = 0.6;
+      if (isBackbeat(t + g)) w = 1.6;              // the classic pickup ghost into 2 and 4
+      else if (sub === 4 && pos(t) === 3) w = 0.9; // "e"
+      else if (sub === 4 && pos(t) === 9) w = 1.1; // "a"
+      else if (sub === 3 && pos(t) === 8) w = 1.1; // last triplet partial
+      cands.push({ t, w });
+    }
+    const max = Math.round(beats * (sub === 4 ? 1.25 : 0.85) * gAmt);
+    const n = Math.min(cands.length, Math.round(max * (0.35 + 0.65 * a)));
+    const jazz = tp.style === 'jazz';
+    for (const c of pick(cands, n, 'g')) {
+      const v = jazz ? 0.26 + 0.12 * R('gv', c.t) : 0.16 + 0.07 * R('gv', c.t);
+      ev.push({ t: c.t, lane: 'S', p: 'snare', v: v * (0.8 + 0.4 * I), ch: 'g', emb: true });
+    }
+  }
+
+  // --- extra kicks ---
+  const oneDrop = !kickAt(0);                       // reggae one-drop and friends: leave the 1 empty
+  if (kAmt > 0 && !(oneDrop && tp.style === 'reggae')) {
+    const heavy = tp.style === 'heavy';
+    const cands = [];
+    for (const t of slots) {
+      if (kickAt(t) || isBackbeat(t)) continue;
+      if (kickAt(t - g) && kickAt(t - 2 * g) && !heavy) continue;   // no runs of three
+      let w;
+      if (pos(t) === 0) w = 0.5;
+      else if (pos(t) === TPB / 2) w = 1.0;                          // "&"
+      else if (sub === 4 && pos(t) === 9) w = 0.85;                  // "a" into the next beat
+      else if (sub === 3 && pos(t) === 8) w = 1.0;
+      else w = 0.3;
+      if (heavy && kickAt(t - g)) w *= 2.2;                          // double-kick pairs
+      if (t === len - g) w *= 1.2;                                   // pickup into the 1
+      if (isBackbeat(t + g) && !heavy && tp.style !== 'funk') w *= 0.5;
+      cands.push({ t, w });
+    }
+    const max = Math.round((comp ? 1 : beats * 0.75) * kAmt + (heavy ? 1 : 0));
+    const n = Math.min(cands.length, Math.round(max * (0.3 + 0.7 * a)));
+    for (const c of pick(cands, n, 'k')) {
+      ev.push({ t: c.t, lane: 'K', p: 'kick', v: (0.6 + 0.14 * R('kv', c.t)) * vmul, ch: 'o', emb: true });
+    }
+  }
+
+  // --- busier time-keeping ---
+  const tl = timeLanes(tp);
+  if (hAmt > 0 && (tl[0] === 'H' || tl[0] === 'R')) {
+    const lane = tl[0];
+    const tev = ev.filter(e => e.lane === lane);
+    if (tev.length) {
+      const closed = tev.find(e => e.ch !== 'O' && e.ch !== 'Q') || tev[0];
+      const base = { lane, p: closed.p === 'hho' ? 'hhc' : closed.p };
+      const toms = st.time === 'low' || st.time === 'toms';
+      let frac = a * hAmt * (toms ? 0.5 : 1);
+      const add = (t, w, extra = {}) => {
+        if (at(lane, t)) return;
+        if (R('h', t) < frac * w) ev.push({ ...base, t, v: (0.42 + 0.1 * R('hv', t)) * vmul, ch: 'v', emb: true, ...extra });
+      };
+      const has8ths = tev.some(e => pos(e.t) === TPB / 2);
+      if (!has8ths && !comp) {
+        // quarter-note time → fill in the eighths
+        for (let b = 0; b < beats; b++) add(b * TPB + TPB / 2, 1.3);
+      } else if (sub === 4 && st.bpm <= 122) {
+        // eighths → sixteenths (the "a" skips come in first)
+        for (let b = 0; b < beats; b++) { add(b * TPB + 9, 1.25); add(b * TPB + 3, 0.8); }
+      } else if (sub === 2 && !swung && st.bpm <= 118) {
+        for (let b = 0; b < beats; b++) { add(b * TPB + 9, 1.1); add(b * TPB + 3, 0.6); }
+      } else if ((sub === 3 || swung) && tp.style !== 'jazz') {
+        // shuffle → fill in the middle triplet partial now and then
+        frac *= 0.6;
+        for (let b = 0; b < beats; b++) add(b * TPB + 4, 1, { trip: true });
+      }
+      // an open-hat bark on the last "&" every other bar, when the groove is on hats
+      if (lane === 'H' && !comp && barNo % 2 === 1 && a > 0.35 && R('open', 0) < hAmt * 0.55 &&
+          !tev.some(e => e.ch === 'O' || e.ch === 'Q')) {
+        const t = len - TPB / 2;
+        const e = ev.find(x => x.lane === 'H' && x.t === t);
+        if (e) { e.p = 'hho'; e.ch = 'O'; e.v = 0.72 * vmul; }
+        for (let i = ev.length - 1; i >= 0; i--) if (ev[i].lane === 'H' && ev[i].t > t && ev[i].emb) ev.splice(i, 1);
+      }
+    }
+  }
 }
 
 // Which lanes keep time in a template: cymbals if it has them, otherwise its toms
