@@ -1163,6 +1163,13 @@ function soundFor(tpl, choice) {
 const KICK_EQ = { hp: 28 };   // kick left as recorded (dampening and tuning are baked into the samples)
 // default snare: a little extra crack (the higher, tighter tuning is baked into the samples)
 const SNARE_EQ = { hp: 110, p: [[0, 0, 1], [1200, 1, 1], [5000, 2, 0.9]] };
+// rock toms (every kit but the jazz one): less boxy low-mids, a little more body and stick attack, gentle slow-attack compression
+const TOM_EQ = { hp: 50, ls: [100, 2], p: [[500, -2.5, 1.2], [0, 0, 1], [4500, 2, 1]] };
+const TOM_COMP = [-20, 2.5, 0.015, 0.16];
+// rock kick (every kit but the jazz one): a little sub thump below the drum's ring, less papery low-mid, more beater, punchier compression
+let ROCK_KICK = true;   // test switch
+const ROCK_KICK_EQ = { hp: 30, p: [[55, 1.5, 1.2], [350, -3, 1.1], [3500, 3, 1.1]] };
+const ROCK_KICK_COMP = [-12, 2, 0.025, 0.05];
 const KICK_COMP = [-12, 2, 0.02, 0.1];
 const KICK_LEN = 0;
 const KICK_BUS = 0;
@@ -1283,13 +1290,14 @@ function createMixer(ctx, kit, opts = {}) {
     const set = (param, v) => { if (instant) { param.cancelScheduledValues(0); param.value = v; } else param.setTargetAtTime(v, t, tc); };
     const I = p.I ?? 0.5;
     for (const [name, s] of Object.entries(strips)) {
-      const e = name === 'kick' ? KICK_EQ : ((snd.eq && snd.eq[name]) || (name === 'snare' ? SNARE_EQ : {}));
+      const rockToms = name === 'toms' && id !== 'club';   // the jazz kit keeps its natural toms
+      const e = name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_EQ : ROCK_KICK_EQ) : ((snd.eq && snd.eq[name]) || (name === 'snare' ? SNARE_EQ : rockToms ? TOM_EQ : {}));
       set(s.hp.frequency, e.hp || 20);
       set(s.ls.frequency, (e.ls || [80, 0])[0]); set(s.ls.gain, (e.ls || [80, 0])[1]);
       for (let i = 0; i < 3; i++) { const pp = (e.p || [])[i] || [1000, 0, 1]; set(s.p[i].frequency, pp[0] || 1000); set(s.p[i].gain, pp[0] ? pp[1] : 0); set(s.p[i].Q, pp[2] || 1); }
       set(s.hs.frequency, (e.hs || [9000, 0])[0]); set(s.hs.gain, (e.hs || [9000, 0])[1]);
       set(s.lp.frequency, e.lp || 20000);
-      const c = name === 'room' ? (snd.roomComp || [-20, 2, 0.01, 0.15]) : name === 'kick' ? KICK_COMP : ((snd.comp && snd.comp[name]) || [-18, 2, 0.01, 0.15]);
+      const c = name === 'room' ? (snd.roomComp || [-20, 2, 0.01, 0.15]) : name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_COMP : ROCK_KICK_COMP) : ((snd.comp && snd.comp[name]) || (rockToms ? TOM_COMP : [-18, 2, 0.01, 0.15]));
       const th = c[0] - (I - 0.5) * 4;
       set(s.comp.threshold, th); set(s.comp.ratio, c[1]); set(s.comp.attack, c[2]); set(s.comp.release, c[3]);
       const busDb = name === 'room' ? 20 * Math.log10(Math.max(0.01, snd.room ?? 1)) : name === 'kick' ? KICK_BUS : ((snd.bus && snd.bus[name]) || 0);
@@ -1382,7 +1390,7 @@ function createMixer(ctx, kit, opts = {}) {
     voices.clear(); openHats.length = 0;
   }
 
-  return { setDebug(b, r) { if (b != null) BASS_AMT = b; if (r != null) REV_RET = r; }, setSound, play, stopAll, master: N.master, nodes: N, get sound() { return cur; } };
+  return { setDebug(b, r, rk) { if (b != null) BASS_AMT = b; if (r != null) REV_RET = r; if (rk != null) ROCK_KICK = rk; }, setSound, play, stopAll, master: N.master, nodes: N, get sound() { return cur; } };
 }
 
 
@@ -2184,14 +2192,14 @@ function bindKeep() {
 // measurement hook used by the build's tests; harmless for players
 window.__pocketTest = {
   sound: () => appliedSound,
-  async hit(piece, sid, vel = 0.9, bass = null, rev = null, secs = 1.6) {
+  async hit(piece, sid, vel = 0.9, bass = null, rev = null, secs = 1.6, rk = null) {
     const sr = 44100, octx = new OfflineAudioContext(2, Math.round(sr * secs), sr);
     const m = createMixer(octx, KITD, { antiRepeat: false });
-    m.setDebug(bass, rev);
+    m.setDebug(bass, rev, rk);
     m.setSound(sid, { I: 0.5, bpm: 110, vol: 1 }, true);
     m.play(piece, vel, 0.05, mulberry(7));
     const b = await octx.startRendering();
-    m.setDebug(-1, 2.5);
+    m.setDebug(-1, 2.5, true);
     return Array.from(b.getChannelData(0));
   },
 };
