@@ -1765,8 +1765,32 @@ const AHEAD = 0.3;
 function pump() { if (!sched.playing) return; while (sched.next < ctx.currentTime + AHEAD) scheduleBeat(); }
 
 let wakeLock = null;
+// iPhone/iPad: Safari treats Web Audio like a game sound, so the ring/silent switch mutes it on the speaker
+// (headphones still play). Declaring the page as media playback makes it play through the speaker like music.
+// Newer Safari: navigator.audioSession. Older iOS: a silent looping <audio> element started from the tap
+// switches the page into the playback category.
+function setPlaybackSession() { try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {} }
+setPlaybackSession();
+let mediaKeepAlive = null;
+function iosMediaSession(on) {
+  setPlaybackSession();
+  const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (!iOS || navigator.audioSession) return;
+  try {
+    if (!mediaKeepAlive) {
+      const n = 8000, b = new Uint8Array(44 + n), v = new DataView(b.buffer), w = (o, t) => { for (let i = 0; i < t.length; i++) b[o + i] = t.charCodeAt(i); };
+      w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true);
+      b.fill(128, 44);                                   // one second of 8-bit silence
+      mediaKeepAlive = new Audio(URL.createObjectURL(new Blob([b], { type: 'audio/wav' })));
+      mediaKeepAlive.loop = true; mediaKeepAlive.setAttribute('playsinline', ''); mediaKeepAlive.preload = 'auto';
+    }
+    if (on) mediaKeepAlive.play().catch(() => {}); else mediaKeepAlive.pause();
+  } catch (e) {}
+}
 async function start(atTime) {
   if (!ready) return;
+  iosMediaSession(true);   // must run inside the tap, before any await
   if (ctx.state !== 'running') await ctx.resume();
   sched.tpl = null;
   applyMix(true);
@@ -1799,6 +1823,7 @@ function stop() {
   hitLog.length = 0;
   setPlayButton();
   try { wakeLock?.release(); } catch (e) {} wakeLock = null;
+  iosMediaSession(false);
 }
 
 // ---------------- UI ----------------
@@ -2606,7 +2631,7 @@ buildStyles();
 buildSounds();
 bindUI();
 bindKeep();
-document.addEventListener('pointerdown', () => { if (ctx && ctx.state !== 'running') ctx.resume(); }, { once: false, passive: true });
+document.addEventListener('pointerdown', () => { setPlaybackSession(); if (ctx && ctx.state !== 'running') ctx.resume(); }, { once: false, passive: true });
 render();
 resize();
 requestAnimationFrame(draw);
