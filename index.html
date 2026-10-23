@@ -122,6 +122,13 @@ header { display: flex; align-items: baseline; justify-content: space-between; g
 .play[data-state="loading"] .spin { width: 40%; height: 40%; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.beats { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: -4px; min-height: 40px; }
+.beat { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 13px; font-weight: 500;
+  color: var(--faint); background: var(--panel); border: 1px solid var(--line); transition: background .25s, color .25s, transform .25s, box-shadow .25s; }
+.beat.one { width: 38px; height: 38px; font-size: 15px; color: var(--mute); border-color: hsl(48 70% 50% / .5); }
+.beat.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; transform: scale(1.12); box-shadow: 0 0 18px hsl(var(--h) 90% 60% / .55); transition: none; }
+.beat.one.on { background: hsl(48 100% 62%); color: #2a1d00; box-shadow: 0 0 24px hsl(48 100% 60% / .7); }
+@media (prefers-reduced-motion: reduce) { .beat, .beat.on { transform: none; } }
 .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; font-family: var(--mono); font-size: 12px; color: var(--mute); margin-top: -6px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend span::before { content: ''; width: 8px; height: 8px; border-radius: 50%; }
@@ -318,6 +325,7 @@ footer a { color: var(--mute); }
         <canvas id="ring" aria-hidden="true"></canvas>
         <button class="play" id="play" data-state="loading" aria-label="Play"><span class="spin"></span></button>
       </div>
+      <div class="beats" id="beats" aria-hidden="true"></div>
       <div class="legend" aria-hidden="true"><span class="k">kick</span><span class="s">snare</span><span class="t">toms</span><span class="h">hats · ride</span></div>
       <div class="groove-row">
         <div class="groove-name"><h1 id="gname">Straight Rock</h1><p id="gmeta">4/4 · 1 of 5</p><p class="gkit" id="gkit">Big room kit</p></div>
@@ -1123,7 +1131,7 @@ const SOUNDS = {
     eq: { snare: { hp: 140, p: [[0, 0, 1], [1200, 1.5, 1], [5500, 3, 0.9]] } } }),
   fat: kitDef({ name: 'Dry & fat', trim: 17.4, room: 0.3, tune: { snare: 0.95 }, len: { snare: 0.36, toms: 0.7 }, master: [2, -1.5, 0.5],
     eq: { snare: { p: [[170, 3.5, 1.1], [0, 0, 1], [0, 0, 1]] } } }),
-  club: kitDef({ name: 'Club room', trim: 18.4, room: 0.75, tune: {}, glue: [-10, 1.6], master: [-1, 0, 0.5] }),
+  club: kitDef({ name: 'Club room', glue: [-13, 1.8], trim: 18.4, room: 0.75, tune: {}, master: [-1, 0, 0.5] }),
   slap: kitDef({ name: 'Slapback room', trim: 17.1, room: 0.55, master: [0.5, -1, 1],
     dly: { time: 'slap', fb: 0.08, lp: 3500, hp: 400, send: { snare: 0.12 } } }),
   plate: kitDef({ name: 'Polished plate', trim: 17.7, room: 0.55, master: [2.5, -2, 2.5], glue: [-16, 3],
@@ -1170,6 +1178,9 @@ const TOM_COMP = [-20, 2.5, 0.015, 0.16];
 let ROCK_KICK = true;   // test switch
 const ROCK_KICK_EQ = { hp: 30, p: [[55, 1.5, 1.2], [350, -3, 1.1], [3500, 3, 1.1]] };
 const ROCK_KICK_COMP = [-12, 2, 0.025, 0.05];
+// cymbals: high-pass the low rumble, soften the harsh clang a touch, a little air on top
+const CYM_EQ = { hp: 280, p: [[0, 0, 1], [3200, -1.5, 1.4], [0, 0, 1]], hs: [11000, 1.5] };
+const CYM_EQ_JAZZ = { hp: 180, hs: [10000, 1] };
 const KICK_COMP = [-12, 2, 0.02, 0.1];
 const KICK_LEN = 0;
 const KICK_BUS = 0;
@@ -1244,7 +1255,7 @@ function createMixer(ctx, kit, opts = {}) {
   N.limTrim = G(); N.limTrim.gain.value = dB(-autoMakeup(-5, 20));
   N.clipPre = G(); N.clipPre.gain.value = 0.5; N.clip = ctx.createWaveShaper(); N.clip.curve = clipCurve(); N.clip.oversample = '4x';
   N.master = G();
-  N.glue.knee.value = 6; N.glue.attack.value = 0.012; N.glue.release.value = 0.14;
+  N.glue.knee.value = 8; N.glue.attack.value = 0.025; N.glue.release.value = 0.2;   // bus glue: slow attack lets hits punch through, smooth release
   N.glueIn.connect(N.glue).connect(N.makeup).connect(N.sat).connect(N.satTrim).connect(N.mHP).connect(N.mLow).connect(N.mMid).connect(N.mHi).connect(N.lim).connect(N.limTrim).connect(N.clipPre).connect(N.clip).connect(N.master).connect(dest);
 
   // drum bus + parallel crush
@@ -1291,7 +1302,8 @@ function createMixer(ctx, kit, opts = {}) {
     const I = p.I ?? 0.5;
     for (const [name, s] of Object.entries(strips)) {
       const rockToms = name === 'toms' && id !== 'club';   // the jazz kit keeps its natural toms
-      const e = name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_EQ : ROCK_KICK_EQ) : ((snd.eq && snd.eq[name]) || (name === 'snare' ? SNARE_EQ : rockToms ? TOM_EQ : {}));
+      const cymEq = name === 'cym' ? (id === 'club' ? CYM_EQ_JAZZ : CYM_EQ) : null;
+      const e = name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_EQ : ROCK_KICK_EQ) : ((snd.eq && snd.eq[name]) || (name === 'snare' ? SNARE_EQ : rockToms ? TOM_EQ : cymEq || {}));
       set(s.hp.frequency, e.hp || 20);
       set(s.ls.frequency, (e.ls || [80, 0])[0]); set(s.ls.gain, (e.ls || [80, 0])[1]);
       for (let i = 0; i < 3; i++) { const pp = (e.p || [])[i] || [1000, 0, 1]; set(s.p[i].frequency, pp[0] || 1000); set(s.p[i].gain, pp[0] ? pp[1] : 0); set(s.p[i].Q, pp[2] || 1); }
@@ -1329,7 +1341,7 @@ function createMixer(ctx, kit, opts = {}) {
     } else { set(N.dlyRet.gain, 0); set(N.dlyFb.gain, 0); }
     // bus + master
     const g = snd.glue || [-14, 2.5];
-    const gth = g[0] - 8 * (I - 0.5), grat = g[1] + 1.5 * I;
+    const gth = g[0] - 2.5 - 8 * (I - 0.5), grat = g[1] + 1.5 * I;
     set(N.glue.threshold, gth); set(N.glue.ratio, grat);
     set(N.makeup.gain, dB(-0.8 * autoMakeup(gth, grat) + (snd.trim || 0) + (p.trim || 0)));   // harder hitting is louder by itself
     set(N.paraGain.gain, 0);
@@ -1385,12 +1397,20 @@ function createMixer(ctx, kit, opts = {}) {
     voices.add(voice);
   }
 
+  function fadeAll(t, tc) {   // quick fade of everything ringing or scheduled
+    for (const v of voices) {
+      for (const g of v.gs) { try { g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0, t, tc); } catch (e) {} }
+      for (const s of v.srcs) { try { s.stop(t + tc * 8); } catch (e) {} }
+    }
+    voices.clear(); openHats.length = 0;
+  }
+
   function stopAll(t) {
     for (const v of voices) for (const s of v.srcs) { try { s.stop(t); } catch (e) {} }
     voices.clear(); openHats.length = 0;
   }
 
-  return { setDebug(b, r, rk) { if (b != null) BASS_AMT = b; if (r != null) REV_RET = r; if (rk != null) ROCK_KICK = rk; }, setSound, play, stopAll, master: N.master, nodes: N, get sound() { return cur; } };
+  return { setDebug(b, r, rk) { if (b != null) BASS_AMT = b; if (r != null) REV_RET = r; if (rk != null) ROCK_KICK = rk; }, setSound, play, stopAll, fadeAll, master: N.master, nodes: N, get sound() { return cur; } };
 }
 
 
@@ -1523,6 +1543,16 @@ async function start(atTime) {
   clearInterval(sched.timer); sched.timer = setInterval(pump, 25);
   setPlayButton();
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) {}
+}
+// start the current groove again from beat 1 right now (used by Surprise me while playing)
+function restartNow() {
+  if (!sched.playing || !mixer) return;
+  const t = ctx.currentTime;
+  mixer.fadeAll(t, 0.025);
+  sched.tpl = null; applyMix(true);
+  sched.bar = 0; sched.beat = 0; sched.countLeft = 0; sched.next = t + 0.06;
+  beatLog.length = 0; barLog.length = 0; hitLog.length = 0;
+  pump();
 }
 function stop() {
   sched.playing = false; clearInterval(sched.timer);
@@ -1683,6 +1713,7 @@ function randomize() {
   S.time = isTomGroove(tpl) ? 'auto' : weighted(rnd, [['auto', 0.55], ['hats', 0.08], ['ride', 0.19], ['low', 0.07], ['toms', 0.11]]);
   S.extras = !!(tpl.perc || STYLE_BY_ID[tpl.style].perc) && rnd() < 0.35;
   applyMix(); render();
+  if (sched.playing) restartNow();
   const d = $('dice'); d.classList.remove('rolling'); void d.offsetWidth; d.classList.add('rolling');
 }
 
@@ -1752,6 +1783,23 @@ function bindUI() {
   });
 }
 
+// ---------------- beat lights ----------------
+let beatKey = '', lastBeat = -2;
+function setBeatLights(tpl, cur) {
+  const m = METERS[tpl.meter], key = tpl.meter;
+  const box = $('beats');
+  if (key !== beatKey) {
+    beatKey = key; lastBeat = -2; box.innerHTML = '';
+    for (let b = 0; b < m.beats; b++) {
+      const d = document.createElement('span'); d.className = 'beat' + (b === 0 ? ' one' : '');
+      d.textContent = m.comp ? String(b * 3 + 1) : String(b + 1); box.appendChild(d);
+    }
+  }
+  if (cur === lastBeat) return;
+  lastBeat = cur;
+  [...box.children].forEach((d, i) => d.classList.toggle('on', i === cur));
+}
+
 // ---------------- the disc ----------------
 const cv = $('ring'), g2 = cv.getContext('2d');
 let W = 0, previewBar = null, previewTpl = null, morph = 1, pulse = 0;
@@ -1792,14 +1840,17 @@ function draw() {
 
   // which bar + playhead
   let bar = previewBar, tpl = previewTpl, phase = null, live = null;
+  let curBeat = -1, beatFrac = 1;
   if (sched.playing && beatLog.length) {
     let bl = null; for (const x of beatLog) if (x.time <= now) bl = x;
     if (bl) {
       live = barLog.find(b => b.id === bl.barId);
       if (live) { bar = live.bar; tpl = live.tpl; }
       phase = (bl.beat + clamp((now - bl.time) / bl.dur, 0, 1)) / bl.beats;
+      curBeat = bl.beat; beatFrac = clamp((now - bl.time) / bl.dur, 0, 1);
     }
   }
+  if (tpl) setBeatLights(tpl, curBeat);
   const isCount = live && live.count;
   if (!bar || !tpl) return;
   const beats = bar.len / TPB;
@@ -1831,6 +1882,16 @@ function draw() {
     g2.fillStyle = lit ? `hsl(${h} 90% 72%)` : `hsl(${h} 15% 62% / .8)`;
     const label = METERS[tpl.meter].comp ? String(b * 3 + 1) : String(b + 1);
     g2.fillText(label, c + Math.cos(a) * W * 0.385, c + Math.sin(a) * W * 0.385);
+  }
+
+  // the outer ring pulses on every beat, brighter and wider on beat 1
+  if (curBeat >= 0 && !(live && live.count && false)) {
+    const one = curBeat === 0, k = Math.max(0, 1 - beatFrac * (one ? 2.2 : 3));
+    if (k > 0) {
+      g2.beginPath(); g2.arc(c, c, W * 0.484, 0, Math.PI * 2);
+      g2.strokeStyle = one ? `hsl(48 100% 70% / ${0.85 * k})` : `hsl(${h + 30} 90% 72% / ${0.5 * k})`;
+      g2.lineWidth = W * (one ? 0.016 : 0.009); g2.stroke();
+    }
   }
 
   // sweeping playhead
@@ -2192,6 +2253,7 @@ function bindKeep() {
 // measurement hook used by the build's tests; harmless for players
 window.__pocketTest = {
   sound: () => appliedSound,
+  glue: () => (mixer ? mixer.nodes.glue.reduction : 0),
   async hit(piece, sid, vel = 0.9, bass = null, rev = null, secs = 1.6, rk = null) {
     const sr = 44100, octx = new OfflineAudioContext(2, Math.round(sr * secs), sr);
     const m = createMixer(octx, KITD, { antiRepeat: false });
