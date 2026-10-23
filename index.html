@@ -392,14 +392,6 @@ footer a { color: var(--mute); }
 
       <div class="opts">
         <div class="opt">
-          <div class="section-label"><span>Extras</span></div>
-          <button class="toggle" id="extras" aria-pressed="false"><span id="extrasLabel">Tambourine</span><span class="sw"></span></button>
-        </div>
-        <div class="opt">
-          <div class="section-label"><span>Start</span></div>
-          <button class="toggle" id="countin" aria-pressed="false"><span>Count me in</span><span class="sw"></span></button>
-        </div>
-        <div class="opt">
           <div class="section-label"><label for="volume">Volume</label></div>
           <div class="vol"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg><input type="range" id="volume" min="0" max="100" value="80"></div>
         </div>
@@ -427,7 +419,7 @@ footer a { color: var(--mute); }
         <div class="seg text" id="bars" role="group" aria-label="Loop length">
           <button data-b="4">4 bars</button><button data-b="8">8 bars</button><button data-b="16">16 bars</button>
         </div>
-        <button class="btn primary" id="exportBtn" disabled>Download MP3</button>
+        <button class="btn primary" id="exportBtn" disabled>Download WAV</button>
       </div>
       <p class="hint" id="exportHint"></p>
       <p class="hint status" id="exportStatus" aria-live="polite"></p>
@@ -915,7 +907,7 @@ function snareArt(mode, ch, I) {
   }
 }
 
-const BASE_VEL = { X: 1, x: 0.82, s: 0.36, v: 0.68, o: 0.76, '+': 0.62, g: 0.2, G: 0.2, O: 0.8, Q: 0.76, b: 0.85 };
+const BASE_VEL = { X: 1, x: 0.82, s: 0.36, v: 0.68, o: 0.76, '+': 0.62, g: 0.15, G: 0.15, O: 0.8, Q: 0.76, b: 0.85 };
 const LANES = ['K', 'S', 'H', 'R', 'P', 'T1', 'T2', 'Q'];
 
 /**
@@ -957,7 +949,7 @@ function compileBar(st, barNo, crashHere) {
         case 'K': p = 'kick'; if (ghost) v = 0.32; break;
         case 'S': p = snareArt(snareMode, ch, I); break;
         case 'H':
-          if (ch === 'O' || ch === 'Q') p = 'hho';
+          if (ch === 'O' || ch === 'Q') p = 'hhs';   // a quick sizzly open, not a fully open wash
           else if (lift && I > 0.9) { p = 'ride'; }
           else p = lift && I >= 0.78 && (i * step) % TPB === 0 ? 'hhh' : 'hhc';   // loose hat on the beats, closed in between
           break;
@@ -1041,7 +1033,7 @@ function embellish(ev, st, tp, beats, barNo, I, vmul) {
   const sHits = ev.filter(e => e.lane === 'S').length;
   const snareBusy = sHits >= slotsOf(g).length * 0.5;   // train beats etc. already full
   const jazz = tp.style === 'jazz';
-  const ghostV = t => (jazz ? 0.26 + 0.12 * R('gv', t) : 0.15 + 0.08 * R('gv', t)) * (0.8 + 0.4 * I);
+  const ghostV = t => (jazz ? 0.26 + 0.12 * R('gv', t) : 0.11 + 0.06 * R('gv', t)) * (0.8 + 0.4 * I);
   if (gAmt > 0 && !snareBusy && accents.length) {
     const cands = [];
     for (const t of slots) {
@@ -1065,6 +1057,27 @@ function embellish(ev, st, tp, beats, barNo, I, vmul) {
         for (const d of [3, 1.5]) if (x - d > 0 && !at('S', x - d) && !kickAt(x - d)) ev.push({ t: x - d, lane: 'S', p: 'snare', v: ghostV(x - d) * (d === 3 ? 0.9 : 1.1), ch: 'g', emb: true });
         break;   // one drag per bar is plenty
       }
+    }
+  }
+
+  // --- full snare parts (train beats): diddles between the soft notes and the odd short buzz ---
+  if (snareBusy && tp.parsed.S) {
+    const soft = ev.filter(e => e.lane === 'S' && e.ch === 's');
+    const sv = (0.36 * vmul);
+    // diddle partner: the middle triplet partial in a swung train beat, a 16th in a straight one, a 32nd in a 16th one
+    const dGap = sub === 4 ? 1.5 : (swung ? 4 : 3);
+    const cands = soft.filter(e => (sub === 4 || pos(e.t) === 0 || !swung) && !at('S', e.t + dGap) && !isBackbeat(e.t + dGap))
+      .map(e => ({ t: e.t, w: pos(e.t) === 0 ? 1.2 : 0.8 }));
+    const n = Math.round(cands.length * (swung ? 0.85 : 0.55) * a);
+    for (const c of pick(cands, n, 'dd')) {
+      const t = c.t + dGap;
+      ev.push({ t, lane: 'S', p: 'snare', v: sv * (0.62 + 0.12 * R('ddv', t)), ch: 's', emb: true, ...(swung && dGap === 4 ? { trip: true } : {}) });
+    }
+    // a short buzz (press stroke) on the 1 or the 3 every other bar, busy end only
+    if (a > 0.5 && barNo % 2 === 1) {
+      const spots = soft.filter(e => pos(e.t) === 0 && (e.t / TPB) % 2 === 0 && !at('S', e.t + 1));
+      const b0 = spots.length ? spots[Math.floor(R('buzz', barNo % 4) * spots.length) % spots.length] : null;
+      if (b0) [0.5, 1, 1.5].forEach((d, k) => !at('S', b0.t + d) && ev.push({ t: b0.t + d, lane: 'S', p: 'snare', v: sv * (0.78 - 0.14 * k), ch: 's', emb: true, trip: true }));
     }
   }
 
@@ -1137,7 +1150,7 @@ function embellish(ev, st, tp, beats, barNo, I, vmul) {
           !tev.some(e => e.ch === 'O' || e.ch === 'Q')) {
         const t = len - TPB / 2;
         const e = ev.find(x => x.lane === 'H' && x.t === t);
-        if (e) { e.p = 'hho'; e.ch = 'O'; e.v = 0.62 * vmul; }
+        if (e) { e.p = 'hhs'; e.ch = 'O'; e.v = 0.62 * vmul; }
         for (let i = ev.length - 1; i >= 0; i--) if (ev[i].lane === 'H' && ev[i].t > t && ev[i].emb) ev.splice(i, 1);
       }
     }
@@ -1163,7 +1176,7 @@ function applyTime(ev, st, tp, beats, I, lift, vmul) {
     e.lane = 'H'; // time always draws on the outer ring
     if (!convert) continue;
     const open = e.ch === 'O' || e.ch === 'Q';
-    if (mode === 'hats') e.p = open ? 'hho' : (lift && I >= 0.78 && e.t % TPB === 0 ? 'hhh' : 'hhc');
+    if (mode === 'hats') e.p = open ? 'hhs' : (lift && I >= 0.78 && e.t % TPB === 0 ? 'hhh' : 'hhc');
     else if (mode === 'ride') { e.p = 'ride'; if (open) e.v *= 1.12; }
     else if (mode === 'low') e.p = 'ltom';
     else { const onBeat = e.t % TPB === 0; hand = onBeat ? 0 : hand ^ 1; e.p = hand ? 'htom' : 'ltom'; }
@@ -1269,27 +1282,27 @@ function kitDef(o) {
     glue: [-14, 2.5], para: 0, sat: 1.05, master: [0, 0, 0], trim: 0 }, o);
 }
 const SOUNDS = {
-  arena: kitDef({ name: 'Big room', trim: 16.8, room: 1.0, tune: {}, master: [2.5, -2.5, 1.5], glue: [-16, 3],
+  arena: kitDef({ name: 'Big room', trim: 18.2, room: 1.0, tune: {}, master: [2.5, -2.5, 1.5], glue: [-16, 3],
     eq: { snare: { p: [[200, 1.5, 1.2], [0, 0, 1], [5000, 1.5, 1]] } } }),
-  stadium: kitDef({ name: 'Stadium', trim: 16.1, room: 0.9, tune: {}, master: [3, -3, 2], glue: [-18, 3.5], para: 0.12,
+  stadium: kitDef({ name: 'Stadium', trim: 18.2, room: 0.9, tune: {}, master: [3, -3, 2], glue: [-18, 3.5], para: 0.12,
     eq: { snare: { p: [[200, 2, 1.2], [800, -1.5, 1], [4500, 2, 1]] } } }),
-  garage: kitDef({ name: 'Garage room', trim: 17.0, room: 1.0, roomComp: [-26, 4, 0.004, 0.1], sat: 1.6, master: [1, -1, 0], tune: {} }),
-  warm: kitDef({ name: 'Warm room', trim: 17.7, room: 0.8, tune: {}, sat: 1.4, master: [1.5, -1, -1.5] }),
-  vintage: kitDef({ name: 'Vintage tape', trim: 17.1, room: 0.45, tune: { snare: 0.95 }, len: { snare: 0.38 }, sat: 1.6, master: [1, -0.5, -3],
+  garage: kitDef({ name: 'Garage room', trim: 18.2, room: 1.0, roomComp: [-26, 4, 0.004, 0.1], sat: 1.6, master: [1, -1, 0], tune: {} }),
+  warm: kitDef({ name: 'Warm room', trim: 18.3, room: 0.8, tune: {}, sat: 1.4, master: [1.5, -1, -1.5] }),
+  vintage: kitDef({ name: 'Vintage tape', trim: 18.0, room: 0.45, tune: { snare: 0.95 }, len: { snare: 0.38 }, sat: 1.6, master: [1, -0.5, -3],
     eq: { snare: { p: [[180, 3, 1.1], [0, 0, 1], [0, 0, 1]], lp: 9000 }, cym: { lp: 10000 } } }),
-  tight: kitDef({ name: 'Dry & tight', trim: 17.5, room: 0.2, tune: {}, len: { snare: 0.28, toms: 0.6 }, master: [2, -1.5, 2],
+  tight: kitDef({ name: 'Dry & tight', trim: 18.2, room: 0.2, tune: {}, len: { snare: 0.28, toms: 0.6 }, master: [2, -1.5, 2],
     eq: { snare: { hp: 140, p: [[0, 0, 1], [1200, 1.5, 1], [5500, 3, 0.9]] } } }),
-  fat: kitDef({ name: 'Dry & fat', trim: 17.4, room: 0.3, tune: { snare: 0.95 }, len: { snare: 0.36, toms: 0.7 }, master: [2, -1.5, 0.5],
+  fat: kitDef({ name: 'Dry & fat', trim: 18.1, room: 0.3, tune: { snare: 0.95 }, len: { snare: 0.36, toms: 0.7 }, master: [2, -1.5, 0.5],
     eq: { snare: { p: [[170, 3.5, 1.1], [0, 0, 1], [0, 0, 1]] } } }),
-  club: kitDef({ name: 'Club room', glue: [-13, 1.8], trim: 18.4, room: 0.75, tune: {}, master: [-1, 0, 0.5] }),
-  slap: kitDef({ name: 'Slapback room', trim: 17.1, room: 0.55, master: [0.5, -1, 1],
+  club: kitDef({ name: 'Club room', glue: [-13, 1.8], trim: 19.3, room: 0.75, tune: {}, master: [-1, 0, 0.5] }),
+  slap: kitDef({ name: 'Slapback room', trim: 18.4, room: 0.55, master: [0.5, -1, 1],
     dly: { time: 'slap', fb: 0.08, lp: 3500, hp: 400, send: { snare: 0.12 } } }),
-  plate: kitDef({ name: 'Polished plate', trim: 17.7, room: 0.55, master: [2.5, -2, 2.5], glue: [-16, 3],
+  plate: kitDef({ name: 'Polished plate', trim: 18.6, room: 0.55, master: [2.5, -2, 2.5], glue: [-16, 3],
     rev: { type: 'plate', decay: 1.3, pre: 0.02, lp: 8000, send: { snare: 0.06, toms: 0.04 } } }),
-  dub: kitDef({ name: 'Dub spring', trim: 20.0, room: 0.35, tune: {}, len: { snare: 0.3 }, master: [1, -1, -2],
+  dub: kitDef({ name: 'Dub spring', trim: 19.9, room: 0.35, tune: {}, len: { snare: 0.3 }, master: [1, -1, -2],
     rev: { type: 'spring', decay: 1.2, pre: 0.01, lp: 4000, send: { snare: 0.05 } }, dly: { time: '8d', fb: 0.24, lp: 2400, hp: 450, send: { snare: 0.08 } } }),
-  live: kitDef({ name: 'Live room', trim: 18.1, room: 0.8, master: [0, 0, 1] }),
-  ballad: kitDef({ name: 'Ballad hall', trim: 16.7, room: 0.9, tune: { snare: 0.95,  }, master: [1, -1, 0],
+  live: kitDef({ name: 'Live room', trim: 18.8, room: 0.8, master: [0, 0, 1] }),
+  ballad: kitDef({ name: 'Ballad hall', trim: 17.5, room: 0.9, tune: { snare: 0.95,  }, master: [1, -1, 0],
     rev: { type: 'plate', decay: 2.0, pre: 0.03, lp: 6500, send: { snare: 0.12, toms: 0.08 } } }),
 };
 const SOUND_ORDER = ['arena', 'stadium', 'garage', 'warm', 'vintage', 'tight', 'fat', 'club', 'slap', 'plate', 'dub', 'live', 'ballad'];
@@ -1320,16 +1333,20 @@ function soundFor(tpl, choice) {
 // Kit: Virtuosity Drums (CC0) at its raw mic balance; kick and toms have light natural dampening and slightly lower tuning baked in.
 const KICK_EQ = { hp: 28 };   // kick left as recorded (dampening and tuning are baked into the samples)
 // default snare: a little extra crack (the higher, tighter tuning is baked into the samples)
-const SNARE_EQ = { hp: 110, p: [[0, 0, 1], [1200, 1, 1], [5000, 2, 0.9]] };
+const SNARE_EQ = { hp: 110, p: [[550, -1.5, 1.2], [1200, 1, 1], [5000, 2, 0.9]] };   // a touch less box, a touch more crack
 // rock toms (every kit but the jazz one): less boxy low-mids, a little more body and stick attack, gentle slow-attack compression
 const TOM_EQ = { hp: 50, ls: [100, 2], p: [[500, -2.5, 1.2], [0, 0, 1], [4500, 2, 1]] };
+// each tom boosted at its own pitch and rolled off below it, so neither sits on the kick's punch
+const LTOM_EQ = { hp: 45, p: [[95, 1.5, 1.3], [450, -2.5, 1.2], [4500, 2, 1]] };
+const HTOM_EQ = { hp: 70, p: [[150, 1.5, 1.3], [550, -2.5, 1.2], [5000, 2, 1]] };
 const TOM_COMP = [-20, 2.5, 0.015, 0.16];
 // rock kick (every kit but the jazz one): a little sub thump below the drum's ring, less papery low-mid, more beater, punchier compression
 let ROCK_KICK = true;   // test switch
 const ROCK_KICK_EQ = { hp: 30, p: [[55, 1.5, 1.2], [350, -3, 1.1], [3500, 3, 1.1]] };
 const ROCK_KICK_COMP = [-12, 2, 0.025, 0.05];
 // cymbals: high-pass the low rumble, soften the harsh clang a touch, a little air on top
-const CYM_EQ = { hp: 280, p: [[0, 0, 1], [3200, -1.5, 1.4], [0, 0, 1]], hs: [11000, 1.5] };
+const CYM_EQ = { hp: 350, p: [[0, 0, 1], [3000, -2.5, 1.2], [0, 0, 1]], hs: [11000, 1.5] };   // hats: low cut above the snare/kick spill, make room for the snare's crack
+const RIDE_EQ = { hp: 250, p: [[1500, -1.5, 1.2], [3000, -2, 1.2], [0, 0, 1]], hs: [11000, 1.5] };  // ride: wash out of the snare's way
 const CYM_EQ_JAZZ = { hp: 180, hs: [10000, 1] };
 // open + half-open hi-hats get their own strip: the wash piles up around 400-1000 Hz ("trash can"),
 // so clean out the gong-y low mids, keep the sizzle, compress gently so the wash isn't pulled up,
@@ -1340,19 +1357,37 @@ const OHAT_COMP = [-14, 1.5, 0.02, 0.1];
 // the ride bell is the loudest cymbal hit: on the shared cymbal compressor every new stroke ducked the ring of the last one.
 // Its own strip has only a light touch so each stroke rings on naturally under the next.
 const BELL_COMP = [-8, 1.25, 0.03, 0.3];
-const CYM_LIKE = { ohat: 'cym', bell: 'cym' };
-const OHAT_RING = { hho: [0.42, 0.16], hhh: [0.25, 0.11] };   // [hold s, fade time-constant s]
+const CYM_LIKE = { ohat: 'cym', sizz: 'cym', bell: 'cym', ride: 'cym', toms2: 'toms' };
+// quick open-hat barks: the clang out, the sizzle up, so it reads as a loose, sizzly hat rather than a wide-open wash
+const SIZZ_EQ = { hp: 450, p: [[600, -4, 0.9], [1100, -2, 1.2], [0, 0, 1]], hs: [7000, 4] };
+// Stereo placement, audience perspective (matches the overhead mics): kick and snare dead center, hi-hat right,
+// ride left, rack tom right, floor tom left, percussion opposite the hats. Moderate, record-style widths; mono-safe.
+const PAN = { kick: 0, snare: 0, cym: 0.3, ohat: 0.3, sizz: 0.3, ride: -0.35, bell: -0.35, toms: -0.35, toms2: 0.25, perc: -0.3, room: 0 };   // strips that share another strip's kit settings
+// Channel peak control. The tall kick/snare/tom attacks used to slam the master limiter, which then pulled the whole kit
+// (ride ring, snare ring, toms) down on every hit. A gentle soft-clip on those channels rounds off only the very top of
+// the loudest strokes (about 0-3 dB, a few milliseconds), so the bus limiter barely works and nothing else gets ducked.
+const CH_CLIP = { kick: 0.3, snare: 0.5, toms: 0.3, toms2: 0.3 };   // level where rounding starts
+const DRIVE = -6;
+const OUT_GAIN = 2;  // clean gain after the limiter: peaks now sit well below full scale, so this is free loudness    // dB less into the master limiter than before (it was doing up to 10-14 dB of gain reduction)
+function chClipCurve() {
+  const n = 2048, c = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1, a = Math.abs(x); c[i] = a < 0.4 ? x : Math.sign(x) * (0.4 + 0.35 * Math.tanh((a - 0.4) / 0.35)); }
+  return c;
+}
+const OHAT_RING = { hho: [0.42, 0.16], hhh: [0.25, 0.11], hhs: [0.3, 0.12] };
+// 'hhs' = sizzle: the half-open recording played a little louder and ringing a bit longer, for quick open-hat barks
+const SAMPLE_OF = { hhs: 'hhh' };   // [hold s, fade time-constant s]
 const OHAT_ROOM = 0.6;                                        // less of the open hat in the room mics
 const KICK_COMP = [-12, 2, 0.02, 0.1];
 const KICK_LEN = 0;
 const KICK_BUS = 0;
 let BASS_AMT = -1;   // test override; -1 = use each sound's calibrated amount      // phone-speaker harmonics on the kick (subtle)
 let REV_RET = 2.5;
-const BUS_OF = { kick: 'kick', snare: 'snare', rim: 'snare', xstick: 'snare', ltom: 'toms', htom: 'toms', hhc: 'cym', hhh: 'ohat', hho: 'ohat', hhp: 'cym', ride: 'cym', bell: 'bell', tamb: 'perc', shaker: 'perc' };
+const BUS_OF = { kick: 'kick', snare: 'snare', rim: 'snare', xstick: 'snare', ltom: 'toms', htom: 'toms2', hhc: 'cym', hhh: 'ohat', hho: 'ohat', hhs: 'sizz', hhp: 'cym', ride: 'ride', bell: 'bell', tamb: 'perc', shaker: 'perc' };
 const TUNE_OF = { kick: 'kick', snare: 'snare', rim: 'snare', xstick: 'snare', ltom: 'ltom', htom: 'htom' };
 const LEN_OF = { kick: 'kick', snare: 'snare', rim: 'snare', ltom: 'toms', htom: 'toms' };
 // natural recorded level of each drum (top velocity layer plays as recorded); open hi-hat kept a little lower
-const REF = {kick:  0.61,  snare:  0.84,  rim:  0.762,  xstick:  0.304,  hhc:  0.357,  hhh:  0.075,  hho:  0.26,  hhp:  0.062,  ride:  0.192,  bell:  0.134,  ltom:  0.424,  htom:  0.457,  tamb:  0.082,  shaker:  0.116};
+const REF = {kick:  0.61,  snare:  0.84,  rim:  0.762,  xstick:  0.304,  hhc:  0.357,  hhh:  0.075,  hho:  0.26,  hhs:  0.1,  hhp:  0.062,  ride:  0.192,  bell:  0.134,  ltom:  0.424,  htom:  0.457,  tamb:  0.082,  shaker:  0.116};
 const dB = v => Math.pow(10, v / 20);
 // The Web Audio compressor adds its own make-up gain: (1 / fullRangeGain) ^ 0.6. We cancel it so gain staging stays predictable.
 const autoMakeup = (th, ratio) => (ratio > 1 && th < 0 ? 0.6 * -th * (1 - 1 / ratio) : 0);
@@ -1414,7 +1449,7 @@ function createMixer(ctx, kit, opts = {}) {
   N.glueIn = G(); N.glue = C(); N.makeup = G(); N.sat = W(shaperCurve(1)); N.satTrim = G();
   N.mHP = F('highpass', 28, 0.7); N.mLow = F('lowshelf', 90); N.mMid = F('peaking', 420, 0.8); N.mHi = F('highshelf', 9000);
   N.lim = C(); N.lim.threshold.value = -5; N.lim.knee.value = 0; N.lim.ratio.value = 20; N.lim.attack.value = 0.001; N.lim.release.value = 0.06;
-  N.limTrim = G(); N.limTrim.gain.value = dB(-autoMakeup(-5, 20));
+  N.limTrim = G(); N.limTrim.gain.value = dB(-autoMakeup(-5, 20) + OUT_GAIN);
   N.clipPre = G(); N.clipPre.gain.value = 0.5; N.clip = ctx.createWaveShaper(); N.clip.curve = clipCurve(); N.clip.oversample = '4x';
   N.master = G();
   N.glue.knee.value = 8; N.glue.attack.value = 0.025; N.glue.release.value = 0.2;   // bus glue: slow attack lets hits punch through, smooth release
@@ -1422,6 +1457,7 @@ function createMixer(ctx, kit, opts = {}) {
 
   // drum bus + parallel crush
   N.drum = G(); N.drum.connect(N.glueIn);
+  N.kickBus = G(); N.kickBus.connect(N.makeup);
   N.para = C(); N.para.threshold.value = -38; N.para.ratio.value = 12; N.para.knee.value = 0; N.para.attack.value = 0.002; N.para.release.value = 0.07;
   N.paraSat = W(shaperCurve(2.2)); N.paraGain = G(); N.paraGain.gain.value = 0;
   N.drum.connect(N.para).connect(N.paraSat).connect(N.paraGain).connect(N.glueIn);
@@ -1437,9 +1473,17 @@ function createMixer(ctx, kit, opts = {}) {
 
   // channel strips
   const strips = {};
-  for (const name of ['kick', 'snare', 'toms', 'cym', 'ohat', 'bell', 'perc', 'room']) {
+  for (const name of ['kick', 'snare', 'toms', 'toms2', 'cym', 'ride', 'ohat', 'sizz', 'bell', 'perc', 'room']) {
     const s = { in: G(), hp: F('highpass', 20, 0.7), ls: F('lowshelf', 80), p: [F('peaking'), F('peaking'), F('peaking')], hs: F('highshelf', 9000), lp: F('lowpass', 20000, 0.6), comp: C(), fader: G(), rev: G(), dly: G() };
-    s.in.connect(s.hp).connect(s.ls).connect(s.p[0]).connect(s.p[1]).connect(s.p[2]).connect(s.hs).connect(s.lp).connect(s.comp).connect(s.fader).connect(N.drum);
+    s.in.connect(s.hp).connect(s.ls).connect(s.p[0]).connect(s.p[1]).connect(s.p[2]).connect(s.hs).connect(s.lp).connect(s.comp);
+    if (CH_CLIP[name]) {
+      const k = 0.4 / CH_CLIP[name];
+      s.cPre = G(); s.cPre.gain.value = k; s.clip = W(chClipCurve()); s.clip.oversample = '4x'; s.cPost = G(); s.cPost.gain.value = 1 / k;
+      s.comp.connect(s.cPre).connect(s.clip).connect(s.cPost).connect(s.fader);
+    } else s.comp.connect(s.fader);
+    s.pan = ctx.createStereoPanner(); s.pan.pan.value = PAN[name] || 0;
+    // the kick goes around the bus glue (like a sidechain high-pass on a bus compressor), so its low end never pumps the kit
+    s.fader.connect(s.pan).connect(name === 'kick' ? N.kickBus : N.drum);
     s.fader.connect(s.rev).connect(N.revIn); s.fader.connect(s.dly).connect(N.dlyIn);
     s.rev.gain.value = 0; s.dly.gain.value = 0;
     s.comp.knee.value = 4;
@@ -1463,16 +1507,16 @@ function createMixer(ctx, kit, opts = {}) {
     const set = (param, v) => { if (instant) { param.cancelScheduledValues(0); param.value = v; } else param.setTargetAtTime(v, t, tc); };
     const I = p.I ?? 0.5;
     for (const [name, s] of Object.entries(strips)) {
-      const rockToms = name === 'toms' && id !== 'club';   // the jazz kit keeps its natural toms
-      const cymEq = name === 'cym' || name === 'bell' ? (id === 'club' ? CYM_EQ_JAZZ : CYM_EQ) : null;
-      const ohatEq = name === 'ohat' ? Object.assign({}, id === 'club' ? OHAT_EQ_JAZZ : OHAT_EQ, snd.eq && snd.eq.cym && snd.eq.cym.lp ? { lp: snd.eq.cym.lp } : {}) : null;
-      const e = ohatEq || (name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_EQ : ROCK_KICK_EQ) : ((snd.eq && snd.eq[name === 'bell' ? 'cym' : name]) || (name === 'snare' ? SNARE_EQ : rockToms ? TOM_EQ : cymEq || {})));
+      const rockToms = (name === 'toms' || name === 'toms2') && id !== 'club';   // the jazz kit keeps its natural toms
+      const cymEq = name === 'cym' || name === 'bell' || name === 'ride' ? (id === 'club' ? CYM_EQ_JAZZ : name === 'cym' ? CYM_EQ : RIDE_EQ) : null;
+      const ohatEq = name === 'ohat' || name === 'sizz' ? Object.assign({}, id === 'club' ? OHAT_EQ_JAZZ : name === 'sizz' ? SIZZ_EQ : OHAT_EQ, snd.eq && snd.eq.cym && snd.eq.cym.lp ? { lp: snd.eq.cym.lp } : {}) : null;
+      const e = ohatEq || (name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_EQ : ROCK_KICK_EQ) : ((snd.eq && snd.eq[CYM_LIKE[name] || name]) || (name === 'snare' ? SNARE_EQ : rockToms ? (name === 'toms' ? LTOM_EQ : HTOM_EQ) : cymEq || {})));
       set(s.hp.frequency, e.hp || 20);
       set(s.ls.frequency, (e.ls || [80, 0])[0]); set(s.ls.gain, (e.ls || [80, 0])[1]);
       for (let i = 0; i < 3; i++) { const pp = (e.p || [])[i] || [1000, 0, 1]; set(s.p[i].frequency, pp[0] || 1000); set(s.p[i].gain, pp[0] ? pp[1] : 0); set(s.p[i].Q, pp[2] || 1); }
       set(s.hs.frequency, (e.hs || [9000, 0])[0]); set(s.hs.gain, (e.hs || [9000, 0])[1]);
       set(s.lp.frequency, e.lp || 20000);
-      const c = name === 'room' ? (snd.roomComp || [-20, 2, 0.01, 0.15]) : name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_COMP : ROCK_KICK_COMP) : ((snd.comp && snd.comp[name]) || (rockToms ? TOM_COMP : name === 'ohat' ? OHAT_COMP : name === 'bell' ? BELL_COMP : [-18, 2, 0.01, 0.15]));
+      const c = name === 'room' ? (snd.roomComp || [-20, 2, 0.01, 0.15]) : name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_COMP : ROCK_KICK_COMP) : ((snd.comp && snd.comp[CYM_LIKE[name] || name]) || (rockToms ? TOM_COMP : name === 'ohat' || name === 'sizz' ? OHAT_COMP : name === 'bell' ? BELL_COMP : [-18, 2, 0.01, 0.15]));
       const th = c[0] - (I - 0.5) * 4;
       set(s.comp.threshold, th); set(s.comp.ratio, c[1]); set(s.comp.attack, c[2]); set(s.comp.release, c[3]);
       const busDb = name === 'room' ? 20 * Math.log10(Math.max(0.01, snd.room ?? 1)) : name === 'kick' ? KICK_BUS : ((snd.bus && snd.bus[CYM_LIKE[name] || name]) || 0);
@@ -1505,9 +1549,9 @@ function createMixer(ctx, kit, opts = {}) {
     } else { set(N.dlyRet.gain, 0); set(N.dlyFb.gain, 0); }
     // bus + master
     const g = snd.glue || [-14, 2.5];
-    const gth = g[0] - 2.5 - 8 * (I - 0.5), grat = g[1] + 1.5 * I;
+    const gth = g[0] + 1 - 6 * (I - 0.5), grat = 1.5 + 0.35 * (g[1] - 1) + 0.7 * I;   // bus glue: gentle, ~1 dB, so one loud kick doesn't pump the cymbals
     set(N.glue.threshold, gth); set(N.glue.ratio, grat);
-    set(N.makeup.gain, dB(-0.8 * autoMakeup(gth, grat) + (snd.trim || 0) + (p.trim || 0)));   // harder hitting is louder by itself
+    set(N.makeup.gain, dB(-0.8 * autoMakeup(gth, grat) + (snd.trim || 0) + (p.trim || 0) + DRIVE));   // harder hitting is louder by itself
     set(N.paraGain.gain, 0);
     const drive = (snd.sat || 1.2) * (0.85 + 0.3 * I);
     N.sat.curve = null; set(N.satTrim.gain, 1);   // clean: no saturation stage
@@ -1526,7 +1570,7 @@ function createMixer(ctx, kit, opts = {}) {
 
   const lastRR = {};
   function pick(piece, vel, rnd) {
-    const kd = kit.KIT[piece]; if (!kd) return null;
+    const kd = kit.KIT[SAMPLE_OF[piece] || piece]; if (!kd) return null;
     const target = kd.top * Math.pow(Math.max(vel, 0.02), 1.7);
     let best = 0, bd = Infinity;
     kd.peaks.forEach((pk, i) => { const d = Math.abs(Math.log(pk / target)); if (d < bd) { bd = d; best = i; } });
@@ -1542,7 +1586,7 @@ function createMixer(ctx, kit, opts = {}) {
   function play(piece, vel, time, rnd = Math.random) {
     const h = pick(piece, vel, rnd); if (!h || !cur) return;
     if (piece === 'hhc' || piece === 'hhp') choke(openHats, time, 0.016);
-    else if (piece === 'hho' || piece === 'hhh') choke(openHats, time, 0.03);
+    else if (piece === 'hho' || piece === 'hhh' || piece === 'hhs') choke(openHats, time, 0.03);
     let rate = (cur.tune && cur.tune[TUNE_OF[piece]]) || 1;
     // only one recording of this hit: vary each stroke a hair (about +/-6 cents, +/-0.7 dB) like a real stick would
     if (h.single) { rate *= 1 + (rnd() - 0.5) * 0.007; h.gain *= 1 + (rnd() - 0.5) * 0.16; }
@@ -1561,7 +1605,7 @@ function createMixer(ctx, kit, opts = {}) {
       voice.srcs.push(src); voice.gs.push(g);
       src.onended = () => { g.disconnect(); voices.delete(voice); };
     }
-    if (piece === 'hho' || piece === 'hhh') openHats.push(voice);
+    if (piece === 'hho' || piece === 'hhh' || piece === 'hhs') openHats.push(voice);
     voices.add(voice);
   }
 
@@ -1578,6 +1622,7 @@ function createMixer(ctx, kit, opts = {}) {
     voices.clear(); openHats.length = 0;
   }
 
+  N.strips = strips;
   return { setDebug(b, r, rk) { if (b != null) BASS_AMT = b; if (r != null) REV_RET = r; if (rk != null) ROCK_KICK = rk; }, setSound, play, stopAll, fadeAll, master: N.master, nodes: N, get sound() { return cur; } };
 }
 
@@ -1608,7 +1653,7 @@ function swingNow(tpl = tplNow(), sw = S.swing, bpm = S.bpm) {
   const fast = tpl.sub === 4 ? clamp(1 - (bpm - 115) / 110, 0.5, 1) : clamp(1 - (bpm - 165) / 110, 0.6, 1);
   return sw * cap * fast;
 }
-const engineState = (extra = {}) => ({ tpl: tplNow(), I: S.I, B: S.B, swing: swingNow(), fills: 0, extras: S.extras, seed: S.seed, bpm: S.bpm, time: S.time, ...extra });
+const engineState = (extra = {}) => ({ tpl: tplNow(), I: S.I, B: S.B, swing: swingNow(), fills: 0, extras: false, seed: S.seed, bpm: S.bpm, time: S.time, ...extra });
 
 // ---------------- audio ----------------
 let ctx = null, KITD = null, mixer = null, ready = false, appliedSound = '';
@@ -1713,7 +1758,7 @@ async function start(atTime) {
   sched.tpl = null;
   applyMix(true);
   sched.playing = true; sched.bar = 0; sched.beat = 0;
-  sched.countLeft = S.countIn && !atTime ? 1 : 0;
+  sched.countLeft = 0;
   sched.next = Math.max(atTime || 0, ctx.currentTime + 0.06);
   beatLog.length = 0; barLog.length = 0;
   pump();
@@ -1809,10 +1854,6 @@ function render() {
   const trip = tpl.sub === 3;
   $('swing').disabled = trip; $('swingFader').classList.toggle('off', trip);
   const perc = tpl.perc || st.perc;
-  $('extras').disabled = !perc && !tpl.forceQ;
-  $('extrasLabel').textContent = perc === 'tamb' ? 'Tambourine' : perc === 'shaker' ? 'Shaker' : `No extras in ${st.name}`;
-  $('extras').setAttribute('aria-pressed', String(S.extras && !!perc));
-  $('countin').setAttribute('aria-pressed', String(S.countIn));
   setRange($('volume'), S.vol);
   for (const [id, k] of [['lockStyle', 'style'], ['lockTempo', 'tempo'], ['lockMeter', 'meter']]) {
     $(id).setAttribute('aria-pressed', String(S.locks[k])); $(id).innerHTML = S.locks[k] ? ICON_LOCK : ICON_UNLOCK;
@@ -1829,7 +1870,7 @@ function render() {
   save();
 }
 
-const TIME_NAMES = { hhc: 'hi-hat', hhh: 'half-open hi-hat', hho: 'open hi-hat', ride: 'ride', bell: 'ride bell', ltom: 'low tom', htom: 'mid tom' };
+const TIME_NAMES = { hhc: 'hi-hat', hhh: 'half-open hi-hat', hho: 'open hi-hat', hhs: 'hi-hat', ride: 'ride', bell: 'ride bell', ltom: 'low tom', htom: 'mid tom' };
 function timeHint(bar) {
   if (S.time !== 'auto') return {
     hats: 'Every groove keeps time on the hi-hat.',
@@ -1910,7 +1951,7 @@ function randomize(styleId) {
   S.sound = 'auto';
   // what keeps time: usually whatever the groove calls for, sometimes ride or toms for a fresh color
   S.time = isTomGroove(tpl) ? 'auto' : weighted(rnd, ['auto', 'hats', 'ride', 'low', 'toms'].map((m, k) => [m, lean.w[k]]));
-  S.extras = !!(tpl.perc || STYLE_BY_ID[tpl.style].perc) && rnd() < 0.35;
+  S.extras = false;
   applyMix(); render();
   if (sched.playing) restartNow();
   if (!styleId) { const d = $('dice'); d.classList.remove('rolling'); void d.offsetWidth; d.classList.add('rolling'); }
@@ -1955,8 +1996,6 @@ function bindUI() {
   bindRange('volume', 'vol', () => applyMix());
   for (const b of $('timeSel').children) b.addEventListener('click', () => { S.time = b.dataset.t; render(); });
   $('soundSel').addEventListener('change', e => { S.sound = e.target.value; applyMix(); render(); });
-  $('extras').addEventListener('click', () => { S.extras = !S.extras; render(); });
-  $('countin').addEventListener('click', () => { S.countIn = !S.countIn; render(); });
   for (const [id, k] of [['lockStyle', 'style'], ['lockTempo', 'tempo'], ['lockMeter', 'meter']]) $(id).addEventListener('click', () => { S.locks[k] = !S.locks[k]; render(); });
 
   // drag the tempo number
@@ -2019,7 +2058,7 @@ function laneColor(lane, p, h, a = 1) {
   if (lane === 'T' || lane === 'T1' || lane === 'T2') return `hsl(${h - 40} 80% 66% / ${a})`;
   if (lane === 'C') return `hsl(48 100% 86% / ${a})`;
   if (lane === 'Q') return `hsl(${h + 10} 30% 70% / ${a})`;
-  if (p === 'hho' || p === 'hhh') return `hsl(${h + 20} 60% 88% / ${a})`;
+  if (p === 'hho' || p === 'hhh' || p === 'hhs') return `hsl(${h + 20} 60% 88% / ${a})`;
   return `hsl(${h + 10} 35% 90% / ${a})`;
 }
 function curHue() { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--h')) || 8; }
@@ -2125,7 +2164,7 @@ function draw() {
     const ghost = e.v < 0.3;
     if (ghost) { g2.strokeStyle = laneColor(lane, e.p, h, 0.75); g2.lineWidth = 1.5; g2.stroke(); }
     else { g2.fillStyle = laneColor(lane, e.p, h, 0.55 + 0.45 * Math.max(hot, phase == null ? 0.6 : 0.25)); g2.fill(); }
-    if (e.p === 'hho' || e.p === 'hhh') { g2.beginPath(); g2.arc(x, y, size + 3, 0, Math.PI * 2); g2.strokeStyle = laneColor(lane, e.p, h, 0.5); g2.lineWidth = 1; g2.stroke(); }
+    if (e.p === 'hho' || e.p === 'hhh' || e.p === 'hhs') { g2.beginPath(); g2.arc(x, y, size + 3, 0, Math.PI * 2); g2.strokeStyle = laneColor(lane, e.p, h, 0.5); g2.lineWidth = 1; g2.stroke(); }
   }
 
 
@@ -2159,7 +2198,7 @@ function buildSounds() {
 }
 
 // ---------------- loop export ----------------
-const GM = { kick: 36, snare: 38, rim: 40, xstick: 37, hhc: 42, hhh: 42, hho: 46, hhp: 44, ride: 51, bell: 53, ltom: 43, htom: 47, tamb: 54, shaker: 70 };
+const GM = { kick: 36, snare: 38, rim: 40, xstick: 37, hhc: 42, hhh: 42, hho: 46, hhs: 46, hhp: 44, ride: 51, bell: 53, ltom: 43, htom: 47, tamb: 54, shaker: 70 };
 let exportBars = 8, downloadsCap = null, downloadsKnown = false, busy = false;
 
 function seededGauss(r) { let u = 0, v = 0; while (!u) u = r(); while (!v) v = r(); return clamp(Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v), -2.5, 2.5); }
@@ -2187,11 +2226,13 @@ async function renderLoopAudio(loop, sr = 44100) {
   const octx = new OfflineAudioContext(2, frames * 2 + 8, sr);
   const m = createMixer(octx, KITD, { antiRepeat: false });
   m.setSound(soundFor(loop.tpl, S.sound), { I: S.I, bpm: S.bpm, vol: 1, bass: window.__bassAB ?? 1 }, true);
-  // two passes: keep the second, so the first pass's ringing tails are already in it and the loop is seamless
-  for (let pass = 0; pass < 2; pass++) {
+  // Render the loop twice and keep the second pass, so the first pass's ringing tails are already in it.
+  // A third pass adds only the hits humanized a hair ahead of the downbeat (they belong at the very end of the
+  // kept pass), so a file placed end to end in a DAW wraps sample-perfectly with every attack intact.
+  for (let pass = 0; pass < 3; pass++) {
     for (const e of loop.events) {
       const t = pass * loop.loopDur + e.time;
-      if (t < 0) continue;
+      if (t < 0 || (pass === 2 && e.time >= 0)) continue;
       m.play(e.p, e.v, t, mulberry(e.seed));
     }
   }
@@ -2233,7 +2274,42 @@ async function mp3Bytes({ L, R, sr }) {
     if (i % (1152 * 200) === 0) await new Promise(z => setTimeout(z, 0));
   }
   const end = enc.flush(); if (end.length) parts.push(new Uint8Array(end));
-  return concat(parts);
+  const audio = concat(parts);
+  try { return concat([mp3InfoFrame(audio, l.length, sr), audio]); } catch (e) { return audio; }
+}
+// LAME "Info" frame: tells decoders (DAWs, players) how many priming samples to skip at the start and how much padding
+// to drop at the end, so the MP3 decodes to exactly the loop's length and repeats with no gap.
+const MP3_ENC_DELAY = 576;
+function mp3InfoFrame(audio, samples, sr) {
+  if (audio[0] !== 0xff || (audio[1] & 0xe0) !== 0xe0) throw new Error('no frame sync');
+  const h1 = audio[1], h2 = audio[2] & ~0x02, h3 = audio[3];          // same header as the audio, padding bit cleared
+  const brIdx = h2 >> 4, br = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320][brIdx] * 1000;
+  const size = Math.floor(144 * br / sr), f = new Uint8Array(size);
+  f.set([0xff, h1, h2, h3]);
+  const mono = (h3 >> 6) === 3, o = 4 + (mono ? 17 : 32);
+  let frames = 0;
+  for (let i = 0; i + 4 <= audio.length;) {                           // count audio frames
+    if (audio[i] !== 0xff || (audio[i + 1] & 0xe0) !== 0xe0) break;
+    const b = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320][audio[i + 2] >> 4] * 1000, pad = (audio[i + 2] >> 1) & 1;
+    if (!b) break; i += Math.floor(144 * b / sr) + pad; frames++;
+  }
+  const w32 = (p, v) => { f[p] = (v >>> 24) & 255; f[p + 1] = (v >>> 16) & 255; f[p + 2] = (v >>> 8) & 255; f[p + 3] = v & 255; };
+  f.set([0x49, 0x6e, 0x66, 0x6f], o);                                 // 'Info'
+  w32(o + 4, 0x0f); w32(o + 8, frames); w32(o + 12, audio.length + size);
+  for (let i = 0; i < 100; i++) f[o + 16 + i] = Math.floor(i * 256 / 100);   // TOC (CBR: linear)
+  w32(o + 116, 0);                                                     // quality
+  const L = o + 120;
+  [...'LAME3.100'].forEach((c, i) => { f[L + i] = c.charCodeAt(0); });
+  f[L + 9] = 0x01;                                                     // tag revision 0, CBR
+  f[L + 10] = Math.min(255, Math.round(sr / 2 / 100));                 // lowpass / 100 Hz
+  const padding = frames * 1152 - samples - MP3_ENC_DELAY;
+  const d = MP3_ENC_DELAY & 0xfff, p = Math.max(0, padding) & 0xfff;
+  f[L + 21] = d >> 4; f[L + 22] = ((d & 15) << 4) | (p >> 8); f[L + 23] = p & 255;
+  w32(L + 28, audio.length + size);                                    // music length
+  const crc16 = (u8, n) => { let c = 0; for (let i = 0; i < n; i++) { c ^= u8[i]; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xa001 : c >>> 1; } return c; };
+  const tc = crc16(f, L + 34);
+  f[L + 34] = tc >> 8; f[L + 35] = tc & 255;
+  return f;
 }
 function concat(parts) { const n = parts.reduce((a, p) => a + p.length, 0), o = new Uint8Array(n); let k = 0; for (const p of parts) { o.set(p, k); k += p.length; } return o; }
 
@@ -2290,7 +2366,7 @@ function zipBlob(files) {
 const slug = s => s.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 function setExportStatus(msg, kind) { const el = $('exportStatus'); el.textContent = msg; el.dataset.kind = kind || ''; }
 
-let exportFmt = 'mp3';
+let exportFmt = 'wav';
 async function exportLoop() {
   if (busy || !ready) return;
   busy = true; renderExport();
@@ -2315,7 +2391,7 @@ async function exportLoop() {
       a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
       setExportStatus(`Downloaded ${name}.`, 'ok');
-    } else {            // inside Claude only some file types can be saved, so the file comes in a zip
+    } else {            // embedded view: only some file types can be saved, so the file comes in a zip
       setExportStatus('Waiting for you to confirm the download…');
       await downloadsCap.save({ filename: base + '.zip', data: zipBlob([{ name, data }]) });
       setExportStatus(`Saved ${base}.zip with ${name} inside.`, 'ok');
@@ -2335,11 +2411,11 @@ const STANDALONE = !(window.claude && window.claude.use);
 function renderExport() {
   for (const b of $('bars').children) b.setAttribute('aria-pressed', String(+b.dataset.b === exportBars));
   for (const b of $('fmt').children) b.setAttribute('aria-pressed', String(b.dataset.f === exportFmt));
-  $('exportHint').textContent = (STANDALONE ? '' : 'Inside Claude the file arrives in a .zip. ') + ({ mp3: 'MP3 works everywhere, but some players add a tiny gap at the loop point.', wav: 'WAV loops perfectly with no gap. Best for looping in a DAW or looper.', mid: 'General MIDI drum notes, for your own drum plugin in a DAW.' })[exportFmt];
+  $('exportHint').textContent = (STANDALONE ? '' : 'Here the file arrives in a .zip. ') + ({ mp3: 'Smaller file. Includes gapless info, so it loops cleanly in most DAWs and players; for a guaranteed sample-perfect loop, use WAV.', wav: 'Sample-perfect loop: drop it in a DAW set to the same tempo and duplicate it end to end with no gap. Best for DAWs and loopers.', mid: 'General MIDI drum notes, for your own drum plugin in a DAW.' })[exportFmt];
   const btn = $('exportBtn');
   btn.disabled = busy || !ready || (!downloadsCap && !STANDALONE);
   btn.textContent = busy ? 'Working…' : `Download ${exportFmt === 'mid' ? 'MIDI' : exportFmt.toUpperCase()}`;
-  if (!STANDALONE && downloadsKnown && !downloadsCap && !busy && !$('exportStatus').dataset.kind) setExportStatus('Exports work when this page is open in Claude.');
+  if (!STANDALONE && downloadsKnown && !downloadsCap && !busy && !$('exportStatus').dataset.kind) setExportStatus('Downloads are not available in this view.');
 }
 
 // ---------------- presets ----------------
@@ -2405,7 +2481,7 @@ function renderPresets() {
     del.addEventListener('click', () => deletePreset(p));
     row.append(load, del); box.appendChild(row);
   }
-  $('presetWhere').textContent = P.where === 'account' ? 'Saved to your Claude account, so they follow you to any device.' : 'Saved in this browser.';
+  $('presetWhere').textContent = P.where === 'account' ? 'Saved to your account, so they follow you to any device.' : 'Saved in this browser.';
 }
 
 let toastTimer = null;
@@ -2462,6 +2538,42 @@ window.__pocketTest = {
     m.play(piece, vel, 0.05, mulberry(7));
     const b = await octx.startRendering();
     m.setDebug(-1, 2.5, true);
+    return Array.from(b.getChannelData(0));
+  },
+  // the current settings' loop as [piece, vel, time] (optionally with overrides), for mix audits
+  grooveHits(over = {}, bars = 2) {
+    const keep = { ...S }; Object.assign(S, over);
+    try { const L = loopEvents(bars); return { hits: L.events.map(e => [e.p, e.v, e.time + 0.05]), dur: L.loopDur, sound: soundFor(L.tpl, S.sound), name: L.tpl.name }; }
+    finally { Object.assign(S, keep); }
+  },
+  // exported loop files for the current settings, plus a long continuous render to check the loop wraps seamlessly
+  async loopFiles(over = {}, bars = 2) {
+    const keep = { ...S }; Object.assign(S, over);
+    try {
+      const loop = loopEvents(bars), audio = await renderLoopAudio(loop), sr = audio.sr, frames = audio.L.length;
+      const octx = new OfflineAudioContext(2, frames * 5, sr), m = createMixer(octx, KITD, { antiRepeat: false });
+      m.setSound(soundFor(loop.tpl, S.sound), { I: S.I, bpm: S.bpm, vol: 1, bass: 1 }, true);
+      for (let pass = 0; pass < 5; pass++) for (const e of loop.events) { const t = pass * loop.loopDur + e.time; if (t >= 0) m.play(e.p, e.v, t, mulberry(e.seed)); }
+      const cont = await octx.startRendering();
+      const mp3 = await mp3Bytes(audio).catch(() => null);
+      return { frames, sr, loopDur: loop.loopDur, L: Array.from(audio.L), cont: Array.from(cont.getChannelData(0)), wav: Array.from(wavBytes(audio)), mp3: mp3 ? Array.from(mp3) : null };
+    } finally { Object.assign(S, keep); }
+  },
+  // render a list of [piece, vel, time] through a fresh mixer (mix audits)
+  async mixRender(hits, sid, I = 0.5, secs = 2, bypass = []) {
+    const sr = 44100, octx = new OfflineAudioContext(2, Math.round(sr * secs), sr);
+    const m = createMixer(octx, KITD, { antiRepeat: false });
+    m.setSound(sid, { I, bpm: 110, vol: 1 }, true);
+    const N = m.nodes, off = c => { c.threshold.value = 0; c.ratio.value = 1; };
+    if (bypass.includes('lim')) { off(N.lim); N.limTrim.gain.value = 1; }
+    if (bypass.includes('glue')) { off(N.glue); }
+    if (bypass.includes('room')) off(N.strips.room.comp);
+    if (bypass.includes('strips')) for (const k in N.strips) if (k !== 'room') off(N.strips[k].comp);
+    if (bypass.includes('clip')) { N.clip.curve = null; }
+    for (const o of bypass) if (String(o).startsWith('drive=')) N.makeup.gain.value *= Math.pow(10, parseFloat(o.slice(6)) / 20);
+    const rnd = mulberry(11);
+    for (const [p, v, t] of hits) m.play(p, v, t, () => 0.5);
+    const b = await octx.startRendering();
     return Array.from(b.getChannelData(0));
   },
 };
