@@ -1307,12 +1307,20 @@ const ROCK_KICK_COMP = [-12, 2, 0.025, 0.05];
 // cymbals: high-pass the low rumble, soften the harsh clang a touch, a little air on top
 const CYM_EQ = { hp: 280, p: [[0, 0, 1], [3200, -1.5, 1.4], [0, 0, 1]], hs: [11000, 1.5] };
 const CYM_EQ_JAZZ = { hp: 180, hs: [10000, 1] };
+// open + half-open hi-hats get their own strip: the wash piles up around 400-1000 Hz ("trash can"),
+// so clean out the gong-y low mids, keep the sizzle, compress gently so the wash isn't pulled up,
+// and let the foot close them a little sooner (a gentle gate on the ring)
+const OHAT_EQ = { hp: 380, p: [[520, -4.5, 1.0], [950, -2, 1.4], [0, 0, 1]], hs: [8500, 2.5] };
+const OHAT_EQ_JAZZ = { hp: 260, p: [[520, -2.5, 1.0], [0, 0, 1], [0, 0, 1]], hs: [9000, 1.5] };
+const OHAT_COMP = [-14, 1.5, 0.02, 0.1];
+const OHAT_RING = { hho: [0.42, 0.16], hhh: [0.25, 0.11] };   // [hold s, fade time-constant s]
+const OHAT_ROOM = 0.6;                                        // less of the open hat in the room mics
 const KICK_COMP = [-12, 2, 0.02, 0.1];
 const KICK_LEN = 0;
 const KICK_BUS = 0;
 let BASS_AMT = -1;   // test override; -1 = use each sound's calibrated amount      // phone-speaker harmonics on the kick (subtle)
 let REV_RET = 2.5;
-const BUS_OF = { kick: 'kick', snare: 'snare', rim: 'snare', xstick: 'snare', ltom: 'toms', htom: 'toms', hhc: 'cym', hhh: 'cym', hho: 'cym', hhp: 'cym', ride: 'cym', bell: 'cym', tamb: 'perc', shaker: 'perc' };
+const BUS_OF = { kick: 'kick', snare: 'snare', rim: 'snare', xstick: 'snare', ltom: 'toms', htom: 'toms', hhc: 'cym', hhh: 'ohat', hho: 'ohat', hhp: 'cym', ride: 'cym', bell: 'cym', tamb: 'perc', shaker: 'perc' };
 const TUNE_OF = { kick: 'kick', snare: 'snare', rim: 'snare', xstick: 'snare', ltom: 'ltom', htom: 'htom' };
 const LEN_OF = { kick: 'kick', snare: 'snare', rim: 'snare', ltom: 'toms', htom: 'toms' };
 // natural recorded level of each drum (top velocity layer plays as recorded); open hi-hat kept a little lower
@@ -1401,7 +1409,7 @@ function createMixer(ctx, kit, opts = {}) {
 
   // channel strips
   const strips = {};
-  for (const name of ['kick', 'snare', 'toms', 'cym', 'perc', 'room']) {
+  for (const name of ['kick', 'snare', 'toms', 'cym', 'ohat', 'perc', 'room']) {
     const s = { in: G(), hp: F('highpass', 20, 0.7), ls: F('lowshelf', 80), p: [F('peaking'), F('peaking'), F('peaking')], hs: F('highshelf', 9000), lp: F('lowpass', 20000, 0.6), comp: C(), fader: G(), rev: G(), dly: G() };
     s.in.connect(s.hp).connect(s.ls).connect(s.p[0]).connect(s.p[1]).connect(s.p[2]).connect(s.hs).connect(s.lp).connect(s.comp).connect(s.fader).connect(N.drum);
     s.fader.connect(s.rev).connect(N.revIn); s.fader.connect(s.dly).connect(N.dlyIn);
@@ -1429,21 +1437,23 @@ function createMixer(ctx, kit, opts = {}) {
     for (const [name, s] of Object.entries(strips)) {
       const rockToms = name === 'toms' && id !== 'club';   // the jazz kit keeps its natural toms
       const cymEq = name === 'cym' ? (id === 'club' ? CYM_EQ_JAZZ : CYM_EQ) : null;
-      const e = name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_EQ : ROCK_KICK_EQ) : ((snd.eq && snd.eq[name]) || (name === 'snare' ? SNARE_EQ : rockToms ? TOM_EQ : cymEq || {}));
+      const ohatEq = name === 'ohat' ? Object.assign({}, id === 'club' ? OHAT_EQ_JAZZ : OHAT_EQ, snd.eq && snd.eq.cym && snd.eq.cym.lp ? { lp: snd.eq.cym.lp } : {}) : null;
+      const e = ohatEq || (name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_EQ : ROCK_KICK_EQ) : ((snd.eq && snd.eq[name]) || (name === 'snare' ? SNARE_EQ : rockToms ? TOM_EQ : cymEq || {})));
       set(s.hp.frequency, e.hp || 20);
       set(s.ls.frequency, (e.ls || [80, 0])[0]); set(s.ls.gain, (e.ls || [80, 0])[1]);
       for (let i = 0; i < 3; i++) { const pp = (e.p || [])[i] || [1000, 0, 1]; set(s.p[i].frequency, pp[0] || 1000); set(s.p[i].gain, pp[0] ? pp[1] : 0); set(s.p[i].Q, pp[2] || 1); }
       set(s.hs.frequency, (e.hs || [9000, 0])[0]); set(s.hs.gain, (e.hs || [9000, 0])[1]);
       set(s.lp.frequency, e.lp || 20000);
-      const c = name === 'room' ? (snd.roomComp || [-20, 2, 0.01, 0.15]) : name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_COMP : ROCK_KICK_COMP) : ((snd.comp && snd.comp[name]) || (rockToms ? TOM_COMP : [-18, 2, 0.01, 0.15]));
+      const c = name === 'room' ? (snd.roomComp || [-20, 2, 0.01, 0.15]) : name === 'kick' ? (id === 'club' || !ROCK_KICK ? KICK_COMP : ROCK_KICK_COMP) : ((snd.comp && snd.comp[name]) || (rockToms ? TOM_COMP : name === 'ohat' ? OHAT_COMP : [-18, 2, 0.01, 0.15]));
       const th = c[0] - (I - 0.5) * 4;
       set(s.comp.threshold, th); set(s.comp.ratio, c[1]); set(s.comp.attack, c[2]); set(s.comp.release, c[3]);
-      const busDb = name === 'room' ? 20 * Math.log10(Math.max(0.01, snd.room ?? 1)) : name === 'kick' ? KICK_BUS : ((snd.bus && snd.bus[name]) || 0);
+      const busDb = name === 'room' ? 20 * Math.log10(Math.max(0.01, snd.room ?? 1)) : name === 'kick' ? KICK_BUS : ((snd.bus && snd.bus[name === 'ohat' ? 'cym' : name]) || 0);
       // keep a quarter of the compressor's own make-up so compressed drums come back up a little
       set(s.fader.gain, dB(busDb - 0.75 * autoMakeup(th, c[1])));
       const dryOnly = name === 'room' || name === 'kick';
-      set(s.rev.gain, dryOnly ? 0 : ((snd.rev && snd.rev.send[name]) || 0));
-      set(s.dly.gain, dryOnly ? 0 : ((snd.dly && snd.dly.send[name]) || 0));
+      const sk = name === 'ohat' ? 'cym' : name;
+      set(s.rev.gain, dryOnly ? 0 : ((snd.rev && snd.rev.send[sk]) || 0));
+      set(s.dly.gain, dryOnly ? 0 : ((snd.dly && snd.dly.send[sk]) || 0));
     }
     const bass = (snd.bass ?? 0.7) * (p.bass ?? 1);
     set(N.bGain.gain, BASS_AMT > 0 ? BASS_AMT : 0); set(N.tGain.gain, 0);
@@ -1508,12 +1518,14 @@ function createMixer(ctx, kit, opts = {}) {
     const rate = (cur.tune && cur.tune[TUNE_OF[piece]]) || 1;
     const len = piece === 'kick' ? 0 : (cur.len && cur.len[LEN_OF[piece]]);
     const voice = { srcs: [], gs: [], start: time };
-    const roomAmt = 1;
+    const ring = OHAT_RING[piece];
+    const roomAmt = ring ? OHAT_ROOM : 1;
     const layers = [[kit.close, offsets.close, strips[BUS_OF[piece]].in, 1, 1], [kit.room, offsets.room, strips.room.in, 0, roomAmt]];
     for (const [buf, off, dst, gated, amt] of layers) {
       const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate;
       const g = ctx.createGain(); g.gain.value = h.gain * amt;
       if (gated && len) { const hold = len * 0.55 / rate; g.gain.setValueAtTime(h.gain * amt, time + hold); g.gain.setTargetAtTime(0, time + hold, len * 0.16); }
+      if (ring) { g.gain.setValueAtTime(h.gain * amt, time + ring[0]); g.gain.setTargetAtTime(0, time + ring[0], ring[1]); }
       src.connect(g).connect(dst);
       src.start(time, h.seg.s + off, h.seg.d);
       voice.srcs.push(src); voice.gs.push(g);
