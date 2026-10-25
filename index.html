@@ -414,7 +414,7 @@ footer a { color: var(--mute); }
       <div class="section-label"><span>Export a loop</span></div>
       <div class="export-row">
         <div class="seg text" id="fmt" role="group" aria-label="File type">
-          <button data-f="mp3">MP3</button><button data-f="wav">WAV</button><button data-f="mid">MIDI</button>
+          <button data-f="mp3">MP3</button><button data-f="wav">WAV</button><button data-f="mid">MIDI</button><button data-f="smf">SMF</button>
         </div>
         <div class="seg text" id="bars" role="group" aria-label="Loop length">
           <button data-b="4">4 bars</button><button data-b="8">8 bars</button><button data-b="16">16 bars</button>
@@ -2413,7 +2413,7 @@ async function exportLoop() {
     const loop = loopEvents(exportBars);
     const base = `pocket-${slug(loop.tpl.name)}-${S.bpm}bpm-${loop.tpl.meter.replace('/', '-')}-${exportBars}bars`;
     let data;
-    if (exportFmt === 'mid') data = midiBytes(loop);
+    if (exportFmt === 'mid' || exportFmt === 'smf') data = midiBytes(loop);   // .smf is the same Standard MIDI File, other extension
     else {
       setExportStatus('Rendering the loop…');
       const audio = await renderLoopAudio(loop);
@@ -2426,7 +2426,8 @@ async function exportLoop() {
     }
     const name = `${base}.${exportFmt}`;
     if (STANDALONE) {   // a normal website: the browser downloads the file itself
-      const url = URL.createObjectURL(new Blob([data])), a = document.createElement('a');
+      const type = { wav: 'audio/wav', mp3: 'audio/mpeg', mid: 'audio/midi', smf: 'audio/midi' }[exportFmt];
+      const url = URL.createObjectURL(new Blob([data], { type })), a = document.createElement('a');
       a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
       setExportStatus(`Downloaded ${name}.`, 'ok');
@@ -2450,7 +2451,7 @@ const STANDALONE = !(window.claude && window.claude.use);
 function renderExport() {
   for (const b of $('bars').children) b.setAttribute('aria-pressed', String(+b.dataset.b === exportBars));
   for (const b of $('fmt').children) b.setAttribute('aria-pressed', String(b.dataset.f === exportFmt));
-  $('exportHint').textContent = (STANDALONE ? '' : 'Here the file arrives in a .zip. ') + ({ mp3: 'Smaller file. Includes gapless info, so it loops cleanly in most DAWs and players; for a guaranteed sample-perfect loop, use WAV.', wav: 'Sample-perfect loop: drop it in a DAW set to the same tempo and duplicate it end to end with no gap. Best for DAWs and loopers.', mid: 'General MIDI drum notes, for your own drum plugin in a DAW.' })[exportFmt];
+  $('exportHint').textContent = (STANDALONE ? '' : 'Here the file arrives in a .zip. ') + ({ mp3: 'Smaller file. Includes gapless info, so it loops cleanly in most DAWs and players; for a guaranteed sample-perfect loop, use WAV.', wav: 'Sample-perfect loop: drop it in a DAW set to the same tempo and duplicate it end to end with no gap. Best for DAWs and loopers.', mid: 'Standard MIDI File (.mid) with General MIDI drum notes, for your own drum plugin in a DAW.', smf: 'The same Standard MIDI File saved as .smf, for gear and apps that look for that extension.' })[exportFmt];
   const btn = $('exportBtn');
   btn.disabled = busy || !ready || (!downloadsCap && !STANDALONE);
   btn.textContent = busy ? 'Working…' : `Download ${exportFmt === 'mid' ? 'MIDI' : exportFmt.toUpperCase()}`;
