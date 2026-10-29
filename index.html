@@ -1333,33 +1333,59 @@ function makeFill(st, slot, beats) {
       out(t, isK ? 'kick' : 'snare', isK ? v * 0.9 : v, tp.sub === 2 ? { trip: true } : {});
       if (!isK && rnd() < 0.35 && t - 4 > start) out(t - 4, 'snare', 0.18, tp.sub === 2 ? { trip: true } : {});   // a ghost before it
     });
-    return { ev, start, L, keepTime: true, name: PATH_NAME.comp, landing: { crash: false, push: false } };
+    return { ev, start, L, keepTime: true, name: PATH_NAME.comp, landing: { crash: false, push: false }, devices: [] };
   }
 
-  // ---- where it starts: on the beat, or a little off it (an 8th early, on the "&", on the "a")
+  const canRate = (res, kind) => bpm * res / 60 <= (kind === 'double' ? HAND_RATE * 1.35 : kind === 'orn' ? HAND_RATE * 1.25 : HAND_RATE);
+  // ---- complexity sets how much a fill MAY do, not what it must do: each fill uses at most one or two "devices",
+  // and plenty stay clean. (Jeff Randall: simple fills that sound killer, fills that keep the backbeat; Mike Johnston:
+  // hidden accent groupings inside 16ths, linear hand/foot ideas; rudiments, ornaments and mixed subdivisions only now and then.)
+  const DEVW = {
+    simple: 0.9 - 0.55 * cx,
+    orn: 0.45 + 0.6 * cx,
+    rud: cx > 0.45 ? 0.25 + 0.8 * cx : 0,
+    mix: !tripFeel && lex.mix > 0 && cx > 0.45 ? lex.mix * 2.2 * cx : 0,
+    r32: !tripFeel && cx > 0.6 && canRate(8, 'orn') ? 0.45 * cx : 0,
+    group: L >= 2 && cx > 0.4 && !lex.comp ? 0.3 + 0.6 * cx : 0,
+    backbeat: beats === 4 && L >= 2 && !lex.comp && tp.style !== 'reggae' ? 0.3 + 0.3 * cx : 0,
+    odd: lex.odd * (0.45 + cx),
+  };
+  const nDev = cx < 0.25 ? (rnd() < 0.25 ? 1 : 0) : cx < 0.55 ? (rnd() < 0.55 ? 1 : 0) + (rnd() < 0.1 ? 1 : 0) : +wpick({ 0: 0.22, 1: 0.5, 2: 0.28 });
+  const dev = new Set();
+  for (let k = 0; k < nDev; k++) {
+    const left = Object.fromEntries(Object.entries(DEVW).filter(([d, w]) => w > 0 && !dev.has(d)));
+    const d = wpick(left); if (!d) break;
+    if (d === 'simple' && dev.size) continue;   // a simple fill stays simple
+    dev.add(d); if (d === 'simple') break;
+  }
+
+  // ---- where it starts: on the beat, or (as a device) a little off it: an 8th early, on the "&", on the "a"
   let start = (beats - L) * TPB;
-  if (rnd() < lex.odd * (0.35 + 0.65 * cx)) {
+  if (dev.has('odd') || rnd() < 0.06) {
     const opts = tripFeel ? [[4, 1], [8, 1.2], [-4, L < beats ? 0.8 : 0]] : [[6, 1.2], [9, 0.7], [3, 0.4], [-6, L < beats ? 1 : 0]];
     const off = +wpick(Object.fromEntries(opts.map(([o, w]) => [o, w])));
     if (start + off >= 0 && end - (start + off) >= TPB / 2) start += off;
   }
   const span = end - start;
-  const tierMax = cx < 0.2 ? 1 : cx < 0.45 ? 2 : 3;
-  const canRate = (res, kind) => bpm * res / 60 <= (kind === 'double' ? HAND_RATE * 1.35 : kind === 'orn' ? HAND_RATE * 1.25 : HAND_RATE);
+  const tierMax = dev.has('simple') ? 1 : cx < 0.2 ? 1 : 2;
   const figW = f => {
     const [id, res, toks, tier, tags] = f;
-    if (tier > tierMax) return 0;
+    if (res === 8) { if (!dev.has('r32')) return 0; }
+    else if (tier === 3) { if (!dev.has('rud') && !(dev.has('orn') && /flam/.test(tags))) return 0; }
+    else if (tier > tierMax) return 0;
     const tw = tags.split(' ').map(t => lex.tags[t] ?? 0);
     let w = Math.min(...tw);
     if (w <= 0) return 0;
     // feel: triplet grooves play triplet figures; straight grooves mostly straight, with some triplets mixed in
     if (tripFeel) { if (res === 4 || res === 8) return 0; if (res === 2) w *= 0.7; }
-    else if (res === 3 || res === 6) w *= lex.mix * (0.4 + cx);
+    else if (res === 3 || res === 6) { if (!dev.has('mix')) return 0; w *= 1.4; }
+    if (dev.has('simple') && res >= 4) w *= 0.45;
+    if (dev.has('orn') && /flam|ruff|buzz/.test(tags)) w *= 1.4;
     // tempo: hands can only go so fast
     const doubles = /roll|diddle|six|jazz|five/.test(tags), orn = /herta/.test(tags);
     if (!canRate(res, doubles ? 'double' : orn ? 'orn' : 'single')) return 0;
     // complexity: simpler figures fade out as it rises, harder ones fade in
-    w *= tier === 0 ? 1.4 - 1.3 * cx : tier === 1 ? 1.25 - 0.7 * cx : tier === 2 ? 0.55 + 0.6 * cx : 0.1 + 1.3 * cx;
+    w *= tier === 0 ? 1.4 - 1.3 * cx : tier === 1 ? 1.25 - 0.7 * cx : tier === 2 ? 0.55 + 0.6 * cx : 0.7 + 0.8 * cx;
     if (cx < 0.25 && res >= 4) w *= 0.5;
     return Math.max(0, w);
   };
@@ -1370,8 +1396,29 @@ function makeFill(st, slot, beats) {
   const figsUsed = [];
   const notes = [];   // {t, tok, beat, res}
   const firstBeat = Math.floor(start / TPB);
-  let prev = null;
-  for (let b = firstBeat; b < beats; b++) {
+  let prev = null, groupCount = 0;
+  if (dev.has('group')) {
+    // a steady stream with the accents grouped across the beat (3-3-2, 3-3-3-3-4, 5-5-6 …; 4s over triplets);
+    // accents travel around the toms, the notes between them are snare taps and ghosts, sometimes ending a group with the kick
+    const gres = tripFeel ? 3 : canRate(4) ? 4 : 2, step = TPB / gres, total = Math.round((end - start) / step);
+    const pats = gres === 3 ? [[4], [4, 4, 4], [5, 4], [2, 4]] : gres === 4 ? [[3, 3, 2], [3, 3, 3, 3, 4], [3, 3, 5, 5], [5, 5, 6], [3, 3, 3, 3, 2, 2], [6, 6, 4]] : [[3, 3, 2], [3]];
+    const pat = pats[Math.floor(rnd() * pats.length)];
+    const kickOK = (lex.tags.linear ?? 0) >= 0.5 || (lex.tags.bonham ?? 0) >= 0.5;
+    const STK = { 2: ['XL'], 3: kickOK ? ['Xlr', 'XLK'] : ['Xlr', 'XLR'], 4: kickOK ? ['XlRl', 'XlrK'] : ['XlRl', 'XlrL'], 5: kickOK ? ['XlRlK', 'XlrKK'] : ['XlRlR', 'XlrlR'], 6: kickOK ? ['XlRlKK', 'XlrlKK'] : ['XlRlRl', 'XlrlRL'] };
+    const stick = {}; for (const z of Object.keys(STK)) stick[z] = STK[z][Math.floor(rnd() * STK[z].length)];
+    let k = 0, gi = 0;
+    while (k < total) {
+      const size = pat[gi % pat.length], sk = stick[size];
+      for (let j = 0; j < size && k < total; j++, k++) {
+        const t = start + k * step;
+        notes.push({ t, tok: sk[j], b: Math.floor(t / TPB + 1e-6), res: gres, i: Math.round((t % TPB) / step), grp: gi, gpos: j });
+      }
+      gi++;
+    }
+    groupCount = gi;
+    figsUsed.push(FIG_BY_ID[gres === 3 ? 't3a' : '16a']);
+  }
+  for (let b = groupCount ? beats : firstBeat; b < beats; b++) {
     const bStart = b * TPB, from = Math.max(start, bStart);
     let f;
     const last = b === beats - 1;
@@ -1394,6 +1441,16 @@ function makeFill(st, slot, beats) {
       notes.push({ t: from, tok: 'X', b, res: r2, i: Math.round(off / (TPB / r2)) });
       notes.sort((a, z) => a.t - z.t);
     }
+  }
+
+  // keep the backbeat: the snare stays on 2 and 4 while toms and kick fill around it
+  if (dev.has('backbeat')) {
+    for (const bb of [1, 3]) {
+      const t = bb * TPB; if (t < start) continue;
+      for (let k = notes.length - 1; k >= 0; k--) if (Math.abs(notes[k].t - t) < 0.01) notes.splice(k, 1);
+      notes.push({ t, tok: 'X', b: bb, res: 4, i: 0, bb: true });
+    }
+    notes.sort((a, z) => a.t - z.t);
   }
 
   // ---- ending: straight through, a stop (space before the 1), an early accent, or a push (crash on the "&" of the last beat)
@@ -1430,9 +1487,16 @@ function makeFill(st, slot, beats) {
   const hands = notes.filter(n => !'K.kC'.includes(n.tok));
   const pairs = Math.max(1, Math.ceil(hands.length / 2));
   let hIdx = 0;
+  const groupPlan = rnd() < 0.5 ? ['T', 'M', 'F', 'F'] : ['S', 'T', 'M', 'F'];
   const drumFor = (n, hand) => {
     const p = (n.t - start) / span, beatK = n.b - firstBeat;
     const along = arr => arr[Math.min(arr.length - 1, Math.floor((Math.floor(hIdx / 2) / pairs) * arr.length))];
+    if (n.bb) return 'S';
+    if (n.grp != null) return n.gpos === 0 ? groupPlan[Math.min(groupPlan.length - 1, Math.floor((n.grp / Math.max(1, groupCount)) * groupPlan.length))] : 'S';
+    if (dev.has('backbeat')) { const d = baseDrum(n, hand, p, beatK, along); return d === 'S' ? (beatK % 2 ? 'F' : 'M') : d; }
+    return baseDrum(n, hand, p, beatK, along);
+  };
+  const baseDrum = (n, hand, p, beatK, along) => {
     switch (path) {
       case 'snare': return p > 0.72 ? along(['S', 'S', 'S', 'M', 'F', 'F']) : (hand === 'R' && 'XF'.includes(n.tok) && rnd() < 0.3 ? 'M' : 'S');   // snare-led, then down the toms
       case 'two': return (nB - 1 - beatK) % 2 === 0 ? 'F' : 'S';
@@ -1452,7 +1516,12 @@ function makeFill(st, slot, beats) {
   // triplet partials in an 8th-note groove must not be swung; in 12/8 and 6/8 a two-note figure sits on the triplet grid
   const tf = n => (tp.sub === 2 && (n.res === 3 || n.res === 6) ? { trip: true } : tp.sub === 3 && n.res === 2 && n.i === 1 ? { t: n.b * TPB + 8 } : {});
   let usedCrashIn = false;
-  const ornAmt = clamp((cx - 0.55) / 0.45, 0, 1), orn = {};
+  const orn = {}, ornKinds = new Set();
+  if (dev.has('orn')) {
+    const o = ORN[tp.style] || ORN.rock, w = { flam: o.flam, drag: o.drag, dbl: tripFeel ? o.dbl * 0.5 : o.dbl, buzz: o.buzz };
+    ornKinds.add(wpick(w)); if (rnd() < 0.3) ornKinds.add(wpick(w));
+  }
+  const ornAmt = ornKinds.size ? 0.55 + 0.45 * cx : 0;
   for (const n of notes) {
     const x = tf(n), t = x.t ?? n.t, xo = x.trip ? { trip: true } : {};
     const g = gain(t), tok = n.tok;
@@ -1479,14 +1548,14 @@ function makeFill(st, slot, beats) {
     if (tok === 'F' || tok === 'G') { out(t - ms(24), drum === 'S' ? 'snare' : DRUM_PIECE[drum], v * 0.38, xo); orn.flam = true; }   // flam grace
     // ornaments as complexity rises: flams and drags on accents, 32nd-note doubles and buzz strokes on taps
     else if (ornAmt > 0 && tok !== 'D' && tok !== 'B') {
-      const o = ORN[tp.style] || ORN.rock, r1 = rnd();
+      const r1 = rnd();
       if (accent) {
-        if (r1 < ornAmt * o.flam * 0.6 && t - ms(24) > start) { out(t - ms(24), piece === 'rim' ? 'snare' : piece, v * 0.38, xo); orn.flam = true; }
-        else if (r1 < ornAmt * (o.flam * 0.6 + o.drag * 0.45) && t - ms(46) > start) { out(t - ms(46), 'snare', 0.2, xo); out(t - ms(24), 'snare', 0.24, xo); orn.ruff = true; }
+        if (ornKinds.has('flam') && r1 < ornAmt * 0.55 && t - ms(24) > start) { out(t - ms(24), piece === 'rim' ? 'snare' : piece, v * 0.38, xo); orn.flam = true; }
+        else if (ornKinds.has('drag') && r1 < ornAmt * 0.45 && t - ms(46) > start) { out(t - ms(46), 'snare', 0.2, xo); out(t - ms(24), 'snare', 0.24, xo); orn.ruff = true; }
       } else if (n.res >= 3 && n.res <= 4) {
         const half = TPB / n.res / 2, freeAfter = !notes.some(m => m.t > t + 0.01 && m.t < t + 2 * half - 0.01);
-        if (r1 < ornAmt * o.dbl * 0.5 && freeAfter && bpm * n.res * 2 / 60 <= HAND_RATE * 1.6) { out(t + half, piece, v * 0.78, xo); orn.dbl = true; }
-        else if (piece === 'snare' && r1 < ornAmt * (o.dbl * 0.5 + o.buzz * 0.4)) { for (let k = 1; k < 3; k++) out(t + k * ms(14), 'snare', v * (0.42 - 0.12 * k), xo); orn.buzz = true; }
+        if (ornKinds.has('dbl') && r1 < ornAmt * 0.35 && freeAfter && bpm * n.res * 2 / 60 <= HAND_RATE * 1.6) { out(t + half, piece, v * 0.78, xo); orn.dbl = true; }
+        else if (ornKinds.has('buzz') && piece === 'snare' && r1 < ornAmt * 0.4) { for (let k = 1; k < 3; k++) out(t + k * ms(14), 'snare', v * (0.42 - 0.12 * k), xo); orn.buzz = true; }
       }
     }
     if (tok === 'D') { out(t - ms(46), 'snare', 0.2, xo); out(t - ms(24), 'snare', 0.24, xo); }               // drag / ruff graces
@@ -1521,7 +1590,7 @@ function makeFill(st, slot, beats) {
   let name = `${PATH_NAME[path] || 'Fill'}: ${[feelWord, ...top].join(', ')}`;
   if (ending === 'push') name += ', push'; else if (ending === 'stop') name += ', stop'; else if (landing.crash) name += ', crash';
   if (start % TPB !== 0) name += ', off-beat start';
-  return { ev, start, L: span / TPB, keepTime: false, name, landing };
+  return { ev, start, L: span / TPB, keepTime: false, name, landing, devices: [...dev] };
 }
 
 // Replace the end of the bar with the fill: the hands leave the groove, the hi-hat foot keeps time.
@@ -2527,7 +2596,6 @@ function buildFills() {
         <button class="fs-btn fs-hear" title="Hear this fill at the end of the next bar" aria-label="Hear fill ${i + 1}">${ICON_PLAY_SM}</button>
         <button class="fs-btn fs-new" title="Roll a different fill" aria-label="Roll a new fill ${i + 1}">${ICON_DICE}</button>
       </div>
-      <div class="fs-name"></div>
       <div class="seg text fs-len" role="group" aria-label="Fill ${i + 1} length">${FILL_LENS.map(([v, l]) => `<button data-v="${v}">${l}</button>`).join('')}</div>
       <label class="mini-fader"><span>Complexity</span><input type="range" min="0" max="100" data-k="cx"></label>
       <label class="mini-fader"><span>Intensity</span><input type="range" min="0" max="100" data-k="int"></label>
@@ -2561,8 +2629,6 @@ function renderFills() {
     c.querySelector('.fs-on').setAttribute('aria-pressed', String(use));
     for (const b of c.querySelectorAll('.fs-len button')) b.setAttribute('aria-pressed', String(String(f.len) === b.dataset.v));
     for (const r of c.querySelectorAll('input[type=range]')) setRange(r, f[r.dataset.k] ?? 0.5);
-    let name = ''; try { name = makeFill(st, { ...f, idx: i }, beats).name; } catch (e) { name = ''; }
-    const nm = c.querySelector('.fs-name'); nm.textContent = name; nm.title = name;
   });
   const act = F.slots.map((f, i) => (f.on !== false ? i + 1 : 0)).filter(Boolean);
   $('fillHint').textContent = !act.length ? 'Every fill is switched off, so the groove just keeps going.'
