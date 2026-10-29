@@ -252,6 +252,36 @@ input[type="range"]:disabled { cursor: not-allowed; }
 .select svg { position: absolute; right: 14px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--mute); pointer-events: none; }
 .select option { background: var(--panel); color: var(--text); }
 
+/* ---------- fills ---------- */
+.fills { min-width: 0; display: grid; gap: 14px; padding: 16px; border-radius: var(--r); border: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 80%, transparent); }
+.fills-head { display: flex; align-items: center; justify-content: space-between; gap: 12px 18px; flex-wrap: wrap; }
+.fills-head > div { min-width: 0; flex: 1 1 260px; }
+.fills-head .hint { margin: 2px 0 0; max-width: 60ch; }
+.fills-head .toggle { width: auto; flex: 0 0 auto; min-width: 140px; }
+.fills-body { display: grid; gap: 14px; }
+.fills-body[hidden] { display: none; }
+.fills-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; align-items: end; }
+.fill-slots { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
+.fill-slot { min-width: 0; display: grid; gap: 8px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); transition: border-color .2s, box-shadow .2s, opacity .2s; }
+.fill-slot.off { opacity: .5; }
+.fill-slot.queued { border-color: hsl(var(--h) 80% 60% / .45); }
+.fill-slot.live { border-color: hsl(var(--h) 85% 62% / .9); box-shadow: inset 0 0 0 1px hsl(var(--h) 85% 62% / .55), 0 0 18px hsl(var(--h) 85% 55% / .18); }
+.fs-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fs-title { font-weight: 700; font-size: 15px; flex: none; }
+.fs-name { color: var(--mute); font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-btn { flex: none; width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line); background: none; color: var(--mute); display: grid; place-items: center; transition: border-color .2s, color .2s; }
+.fs-btn:hover { border-color: var(--faint); color: var(--text); }
+.fs-btn svg { width: 15px; height: 15px; }
+.fs-on { flex: none; border: none; background: none; padding: 4px 0; display: grid; }
+.fs-on .sw { width: 34px; height: 20px; border-radius: 99px; background: var(--line); position: relative; transition: background .2s; }
+.fs-on .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--mute); transition: transform .2s, background .2s; }
+.fs-on[aria-pressed="true"] .sw { background: var(--accent); }
+.fs-on[aria-pressed="true"] .sw::after { transform: translateX(14px); background: var(--accent-ink); }
+.fs-len button { padding: 7px 2px; font-size: 13px; }
+.mini-fader { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 10px; font-size: 12.5px; color: var(--mute); }
+.mini-fader input[type="range"] { height: 30px; }
+.mini-fader input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -6px; border-width: 4px; }
+
 /* ---------- presets + export ---------- */
 .keep { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); align-items: start; }
 .keep-card { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 16px; border-radius: var(--r); border: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 80%, transparent); }
@@ -398,6 +428,25 @@ footer a { color: var(--mute); }
       </div>
     </section>
   </div>
+
+  <section class="fills" id="fillsCard" aria-label="Fills">
+    <div class="fills-head">
+      <div>
+        <div class="section-label"><span>Fills</span></div>
+        <p class="hint">Off unless you turn it on. Adds up to four drum fills that take turns at the end of each phrase, the way a drummer marks the turnaround, then lands back on the 1.</p>
+      </div>
+      <button class="toggle" id="fillsOn" aria-pressed="false"><span>Play fills</span><span class="sw"></span></button>
+    </div>
+    <div class="fills-body" id="fillsBody" hidden>
+      <div class="fills-row">
+        <div class="opt"><div class="section-label"><span>Fill every</span></div><div class="seg text" id="fillEvery" role="group" aria-label="Fill every"><button data-v="2">2 bars</button><button data-v="4">4 bars</button><button data-v="8">8 bars</button></div></div>
+        <div class="opt"><div class="section-label"><span>Order</span></div><div class="seg text" id="fillOrder" role="group" aria-label="Fill order"><button data-v="cycle">In turn</button><button data-v="random">Random</button></div></div>
+        <button class="btn" id="fillRollAll">New fills</button>
+      </div>
+      <div class="fill-slots" id="fillSlots"></div>
+      <p class="hint" id="fillHint"></p>
+    </div>
+  </section>
 
   <section class="keep" aria-label="Save and export">
     <div class="keep-card">
@@ -920,8 +969,9 @@ function compileBar(st, barNo, crashHere) {
   const I = st.I, B = st.B;
   const vmul = 0.5 + 0.62 * I;
   const pb = barNo % (tp.bars || 1);
-  const phrase = st.fills || 0;
-  const isFill = !!st.forceFill || (phrase > 0 && barNo % phrase === phrase - 1);
+  const fslot = fillSlotFor(st, barNo);
+  const fillCfgSlot = fslot >= 0 ? ((st.fillCfg && st.fillCfg.slots && st.fillCfg.slots[fslot]) || DEFAULT_FILL_SLOTS[fslot]) : null;
+  const isFill = !!fillCfgSlot;
   const isVar = !isFill && barNo % 4 === 3;
   const snareMode = tp.snare || style.snare;
   const lift = tp.lift ?? style.lift;
@@ -982,9 +1032,11 @@ function compileBar(st, barNo, crashHere) {
 
   embellish(ev, st, tp, beats, barNo, I, vmul);
   applyTime(ev, st, tp, beats, I, lift, vmul);
-  if (isFill) addFill(ev, st, barNo, beats, vmul);
+  if (st.afterFill) landAfterFill(ev, vmul);
+  let fillName = '';
+  if (isFill) fillName = addRealFill(ev, st, { ...fillCfgSlot, idx: fslot }, beats, vmul).name;
   ev.sort((a, b) => a.t - b.t);
-  return { ev, len: beats * TPB, fill: isFill, crashNext: isFill };
+  return { ev, len: beats * TPB, fill: isFill, fillSlot: fslot, fillName };
 }
 
 // ---------- busyness embellishments ----------
@@ -1156,6 +1208,222 @@ function embellish(ev, st, tp, beats, barNo, I, vmul) {
     }
   }
 }
+
+// ---------- fills ----------
+// Fills the way working drummers build them: at the end of a phrase, short (a beat or two) most of the time and a full
+// bar at bigger turnarounds; single strokes moving down the kit in hand pairs (snare, rack tom, floor tom); accents on
+// the main counts with ghost notes between; hand-hand-kick triplets; linear hand/foot 16ths; flams on accents; a hole
+// before the 1 now and then. Each style has its own vocabulary, every fill obeys a hand-speed limit at the current
+// tempo and the groove's swing/triplet feel, the hi-hat foot keeps time underneath, and the groove lands on the 1.
+const FILL_STYLE = {
+  rock:    { kick: 0.45, linear: 0.25, ghost: 0.15, flam: 0.25, trip: 0.18, stop: 0.22, shapes: { down: 3, snare: 1.2, toms: 1, call: 0.8, stomp: 0.5 } },
+  pop:     { kick: 0.3, linear: 0.1, ghost: 0.2, flam: 0.12, trip: 0.08, stop: 0.28, shapes: { down: 2.5, snare: 2, toms: 0.8, call: 0.5 } },
+  soul:    { kick: 0.25, linear: 0.2, ghost: 0.6, flam: 0.15, trip: 0.1, stop: 0.3, shapes: { snare: 2.5, down: 1.8, call: 0.6 } },
+  funk:    { kick: 0.1, linear: 0.6, ghost: 0.85, flam: 0.2, trip: 0.05, stop: 0.45, shapes: { snare: 1.8, down: 1.5, call: 1.2 } },
+  heavy:   { kick: 0.8, linear: 0.35, ghost: 0, flam: 0.35, trip: 0.25, stop: 0.25, dbl: true, shapes: { down: 2, toms: 2, stomp: 1.4, call: 0.8 } },
+  blues:   { kick: 0.35, linear: 0.45, ghost: 0.3, flam: 0.2, trip: 0, stop: 0.25, shapes: { down: 2, snare: 1.5, call: 1 } },
+  shuffle: { kick: 0.35, linear: 0.45, ghost: 0.3, flam: 0.2, trip: 0, stop: 0.25, shapes: { down: 2, snare: 1.5, call: 1 } },
+  country: { kick: 0.3, linear: 0.05, ghost: 0.25, flam: 0.15, trip: 0.05, stop: 0.3, shapes: { snare: 2.6, down: 1, call: 0.9, roll: 1.6 } },
+  reggae:  { kick: 0.15, linear: 0.05, ghost: 0.2, flam: 0.1, trip: 0.15, stop: 0.2, shapes: { snare: 1.5, toms: 1.4, roll: 1.2, down: 0.8 } },
+  latin:   { kick: 0.2, linear: 0.1, ghost: 0.3, flam: 0.15, trip: 0.05, stop: 0.4, shapes: { latin: 2.5, down: 1, toms: 0.8 } },
+  jazz:    { comp: true },
+};
+// each of the four slots leans to a different kind of fill, so a drummer's four go-to fills contrast with each other
+const FILL_SLOT_LEAN = [{ down: 1.8, stomp: 0.4 }, { snare: 2, call: 1.2, stomp: 0.3 }, { toms: 1.8, call: 1.6, latin: 1.3, roll: 1.3, stomp: 0.5 }, { down: 1.3, stomp: 1.4, roll: 1.2, toms: 1.2 }];
+const FILL_SHAPE_NAME = { down: 'Around the kit', snare: 'Snare', toms: 'Tom run', call: 'Snare and floor tom', stomp: 'Floor tom stomp', roll: 'Snare roll', latin: 'Latin 3-3-2', comp: 'Jazz comping', run: 'Jazz triplet run' };
+const FILL_RES_NAME = { 2: '8ths', 3: 'triplets', 4: '16ths', 6: 'sextuplets', 8: '32nds' };
+const HAND_RATE = 12.5;   // fastest single strokes per second we let the hands play
+
+// which fill slot (0-3) plays at the end of this bar, or -1
+function fillSlotFor(st, barNo) {
+  if (st.forceFillSlot != null && st.forceFillSlot >= 0) return st.forceFillSlot;
+  const cfg = st.fillCfg;
+  if (!cfg || !cfg.on || !cfg.slots) return -1;
+  const every = cfg.every || 4;
+  if (barNo % every !== every - 1) return -1;
+  const act = cfg.slots.map((s, i) => (s && s.on !== false ? i : -1)).filter(i => i >= 0);
+  if (!act.length) return -1;
+  const k = Math.floor(barNo / every);
+  return cfg.order === 'random' ? act[Math.floor(hash32(st.seed, 'fillpick', k) * act.length)] : act[k % act.length];
+}
+function fillBeats(slot, beats) {
+  const L = slot.len === 'bar' ? beats : Number(slot.len) || 2;
+  return clamp(L, 1, beats);
+}
+
+// Build one fill (events + a short name). Deterministic for a slot's seed in a given style and meter.
+function makeFill(st, slot, beats) {
+  const tp = st.tpl, prof = FILL_STYLE[tp.style] || FILL_STYLE.rock;
+  const rnd = mulberry((((slot.seed >>> 0) ^ Math.floor(hash32(tp.style, tp.meter, tp.name) * 4294967295)) >>> 0) || 1);
+  const pick = obj => { const e = Object.entries(obj); let x = rnd() * e.reduce((a, [, w]) => a + w, 0); for (const [k, w] of e) if ((x -= w) <= 0) return k; return e[0][0]; };
+  const L = fillBeats(slot, beats), start = (beats - L) * TPB, bpm = st.bpm || 110;
+  const cx = clamp(slot.cx ?? 0.5, 0, 1), inten = clamp(slot.int ?? 0.6, 0, 1), build = clamp(slot.build ?? 0.4, 0, 1);
+  const ratio = tp.sub === 3 ? 0.5 : swingRatio(st.swing);
+  const swung = tp.sub === 2 && ratio >= 0.56;
+  const tripFeel = tp.sub === 3 || swung;
+  const tripFlag = (tp.sub === 2) ? { trip: true } : {};          // triplet partials in an 8th-note groove must not be swung
+  const base = (0.5 + 0.55 * inten) * (0.75 + 0.35 * (st.I ?? 0.5));
+  const flamT = (0.024 / (60 / bpm)) * TPB;                       // ~24 ms grace note, in ticks
+  const ev = [], out = (t, lane, p, v, extra = {}) => ev.push({ t, lane, p, v: clamp(v, 0.04, 1.2), ch: 'f', fill: true, ...extra });
+  const prog = t => (L * TPB > TPB ? (t - start) / (L * TPB - TPB / 2) : 1);
+  const buildGain = t => 1 - build * 0.55 * Math.pow(clamp(1 - prog(t), 0, 1), 1.3);
+
+  // ---- jazz: comping-style fills (snare + bass drum conversation on the triplet grid), or a triplet run around the kit
+  if (prof.comp) {
+    const run = cx > 0.62 && rnd() < 0.55 && bpm * 3 / 60 <= HAND_RATE;
+    const keepTime = !run && L <= 2 && cx < 0.6;                   // short comping fill: the ride keeps going
+    if (run) {
+      const seq = ['S', 'S', 'T1', 'T1', 'T2', 'T2'];
+      const n = L * 3;
+      for (let i = 0; i < n; i++) {
+        const t = start + i * (TPB / 3), lane = seq[Math.min(seq.length - 1, Math.floor((Math.floor(i / 2) * 2) / n * seq.length))];
+        out(t, lane, lane === 'S' ? 'snare' : lane === 'T1' ? 'htom' : 'ltom', base * (i % 3 === 0 ? 0.9 : 0.62) * buildGain(t), tripFlag);
+      }
+      out(start + (L - 1) * TPB + 8, 'K', 'kick', base * 0.8, tripFlag);
+    } else {
+      const slots = []; for (let b = 0; b < L; b++) for (const k of [0, 4, 8]) slots.push(start + b * TPB + k);
+      const n = clamp(Math.round(slots.length * (0.22 + 0.4 * cx)), 2, slots.length);
+      const chosen = new Set([slots[slots.length - 1]]);          // the "let" of the last beat: the classic anticipation of the 1
+      while (chosen.size < n) chosen.add(slots[Math.floor(rnd() * slots.length)]);
+      [...chosen].sort((a, b) => a - b).forEach((t, k, arr) => {
+        const r = rnd(), lane = r < 0.3 ? 'K' : (!keepTime && r > 0.86 ? (r > 0.94 ? 'T2' : 'T1') : 'S');
+        const p = lane === 'K' ? 'kick' : lane === 'S' ? 'snare' : lane === 'T1' ? 'htom' : 'ltom';
+        out(t, lane, p, base * (0.55 + 0.3 * (k / Math.max(1, arr.length - 1))) * (lane === 'K' ? 0.9 : 1), tripFlag);
+      });
+    }
+    return { ev, start, L, keepTime, name: run ? FILL_SHAPE_NAME.run : FILL_SHAPE_NAME.comp };
+  }
+
+  // ---- everything else: choose a subdivision the hands can actually play at this tempo
+  let res;
+  const can = r => bpm * r / 60 <= HAND_RATE;
+  if (tripFeel) res = cx > 0.72 && can(6) ? 6 : 3;
+  else if (!METERS[tp.meter].comp && cx > 0.5 && rnd() < prof.trip) res = cx > 0.8 && can(6) ? 6 : 3;
+  else res = cx > 0.22 && can(4) ? 4 : 2;
+  if (!tripFeel && METERS[tp.meter].comp) res = 3;
+  const lean = FILL_SLOT_LEAN[slot.idx ?? -1] || {};
+  let shape = pick(Object.fromEntries(Object.entries(prof.shapes).map(([k, w]) => [k, w * (lean[k] ?? 1)])));
+  if (shape === 'latin' && res !== 4) shape = 'down';
+  if (shape === 'stomp' && L < 2) shape = 'down';
+  if (shape === 'roll' && !(can(res * 2) || res === 4)) shape = 'snare';
+  if (shape === 'stomp') res = tripFeel ? 3 : 2;          // floor tom + kick unisons are 8ths (or triplets), never a 16th wall
+  const step = TPB / res;
+
+  // rhythm: one cell per beat, denser toward the end (a fill "pulls" into the 1)
+  const notes = [];
+  const cell = dens => {
+    if (res === 4) return dens < 0.28 ? (rnd() < 0.3 ? [0] : [0, 2]) : dens < 0.5 ? [[0, 2], [0, 2, 3], [0, 1, 2]][Math.floor(rnd() * 3)] : dens < 0.75 ? [[0, 1, 2, 3], [0, 1, 2, 3], [0, 2, 3], [0, 1, 3]][Math.floor(rnd() * 4)] : [0, 1, 2, 3];
+    if (res === 2) return dens < 0.3 && rnd() < 0.5 ? [0] : [0, 1];
+    if (res === 3) return dens < 0.35 ? [0, 2] : dens < 0.6 ? (rnd() < 0.5 ? [0, 1, 2] : [0, 2]) : [0, 1, 2];
+    return [0, 1, 2, 3, 4, 5];
+  };
+  for (let b = 0; b < L; b++) {
+    let dens = 0.15 + 0.85 * cx + (L > 1 ? (b / (L - 1)) * 0.3 * build : 0) - (L > 2 && b === 0 ? 0.15 : 0);
+    let c = cell(dens);
+    if (shape === 'roll' || shape === 'latin' || shape === 'stomp') c = Array.from({ length: res }, (_, i) => i);
+    for (const i of c) notes.push({ t: start + b * TPB + i * step, b, i });
+  }
+  // a hole before the 1: end on the "&" of the last beat with a unison hit
+  const stopEnd = L >= 2 && res !== 6 && rnd() < prof.stop && shape !== 'roll';
+  if (stopEnd) {
+    const lb = start + (L - 1) * TPB;
+    for (let k = notes.length - 1; k >= 0; k--) if (notes[k].t >= lb) notes.splice(k, 1);
+    notes.push({ t: lb, b: L - 1, i: 0 }, { t: lb + (res === 3 ? 8 : 6), b: L - 1, i: 99, stop: true });
+  }
+  const N = notes.length;
+
+  // voices: drums change in hand pairs, moving down the kit
+  const seqs = { down: L === 1 ? (rnd() < 0.5 ? ['S', 'T1', 'T2'] : ['S', 'T2']) : ['S', 'S', 'T1', 'T2'], toms: rnd() < 0.5 ? ['T1', 'T2'] : ['S', 'T1', 'T1', 'T2'], snare: ['S'], roll: ['S'] };
+  const ghostMode = rnd() < prof.ghost;
+  const accentAt = n => (shape === 'latin' ? [0, 3, 6].includes(Math.round((n.t - start) / step) % 8) : n.i === 0 || n.stop);
+  let usedLinear = false, usedFlam = false;
+  notes.forEach((n, k) => {
+    let lane;
+    if (shape === 'call') lane = n.b % 2 === (L % 2) ? 'T2' : 'S';
+    else if (shape === 'stomp') lane = 'T2';
+    else if (shape === 'latin') lane = accentAt(n) ? (Math.round((n.t - start) / step) % 16 < 8 ? 'T1' : 'T2') : 'S';
+    else {
+      const seq = seqs[shape] || seqs.down, pairIdx = Math.floor(k / 2) * 2;
+      lane = seq[Math.min(seq.length - 1, Math.floor((pairIdx / Math.max(1, N)) * seq.length))];
+      if (shape === 'snare' && N >= 4 && k >= N - 2 && rnd() < 0.5) lane = 'T2';   // a snare fill often tips into the floor tom
+    }
+    if (n.stop) lane = 'S';
+    const acc = accentAt(n);
+    let v = base * (acc ? 1 : 0.76) * buildGain(n.t);
+    if (ghostMode && !acc && lane === 'S') v = 0.2 * (0.8 + 0.4 * (st.I ?? 0.5));
+    if (shape === 'roll') v = base * (0.35 + 0.65 * Math.pow(prog(n.t), 1.4)) * (acc ? 1.05 : 0.9);
+    const p = lane === 'S' ? (acc && inten > 0.78 ? 'rim' : 'snare') : lane === 'T1' ? 'htom' : 'ltom';
+    const tf = res === 3 || res === 6 ? tripFlag : {};
+    // linear: the last partial of a beat goes to the bass drum (R L R K / R L K)
+    const linSlot = res === 4 ? 3 : res === 3 ? 2 : res === 6 ? (n.i === 2 || n.i === 5) : -1;
+    const isLin = N >= 4 && !n.stop && shape !== 'roll' && shape !== 'stomp' && (res === 6 ? linSlot : n.i === linSlot) && rnd() < prof.linear * (0.4 + cx);
+    if (isLin) { out(n.t, 'K', 'kick', v * 0.95, tf); usedLinear = true; return; }
+    out(n.t, lane, p, v, tf);
+    if (shape === 'stomp') out(n.t, 'K', 'kick', v * 0.9, tf);   // unison with the floor tom
+    if (n.stop) { out(n.t, 'T2', 'ltom', v * 0.95, tf); out(n.t, 'K', 'kick', v * 0.95, tf); }
+    // flams on accents (never ahead of the bar line)
+    const roomForFlam = res <= 4 && bpm * res / 60 <= 9.5 && !notes.some(m => m.t < n.t && n.t - m.t < step * 0.99);
+    if (acc && !n.stop && roomForFlam && n.t - flamT > 0.5 && rnd() < prof.flam * (0.3 + cx)) { out(n.t - flamT, lane, p === 'rim' ? 'snare' : p, v * 0.42, tf); usedFlam = true; }
+  });
+  // a short buzz into the accent for snare rolls (country/reggae): extra soft strokes at double speed where playable
+  if (shape === 'roll' && can(res * 2) && cx > 0.35) {
+    for (const n of notes.slice(0, -1)) { const t = n.t + step / 2; out(t, 'S', 'snare', base * (0.3 + 0.55 * Math.pow(prog(t), 1.4)) * 0.85, res === 3 ? tripFlag : {}); }
+  }
+  // feet: kick under the fill on the beats (rock/heavy), double kick under the last beat(s) of busy heavy fills
+  if (shape !== 'stomp') {
+    if (prof.dbl && cx > 0.65 && res >= 4 && bpm <= 165) {
+      const from = start + Math.max(0, L - 2) * TPB;
+      for (let t = from; t < start + L * TPB; t += TPB / 4) if (!ev.some(e => e.lane === 'K' && Math.abs(e.t - t) < 0.01)) out(t, 'K', 'kick', base * 0.72);
+    } else if (rnd() < prof.kick) {
+      for (let b = 0; b < L; b++) { const t = start + b * TPB; if (!ev.some(e => e.lane === 'K' && Math.abs(e.t - t) < 0.01)) out(t, 'K', 'kick', base * 0.7); }
+    }
+  }
+  // one stroke per drum per spot (keep the louder one)
+  for (let i = ev.length - 1; i >= 0; i--) {
+    const j = ev.findIndex((e, k) => k < i && e.p === ev[i].p && Math.abs(e.t - ev[i].t) < 0.01);
+    if (j >= 0) { ev[j].v = Math.max(ev[j].v, ev[i].v); ev.splice(i, 1); }
+  }
+  let name = `${FILL_SHAPE_NAME[shape] || 'Fill'}, ${FILL_RES_NAME[res]}`;
+  if (usedLinear) name += res === 3 || res === 6 ? ' with kick' : ', linear';
+  else if (usedFlam && cx > 0.6) name += ' with flams';
+  if (stopEnd) name += ', stop';
+  return { ev, start, L, keepTime: false, name };
+}
+
+// Replace the end of the bar with the fill: groove hands stop, the hi-hat foot keeps time.
+function addRealFill(ev, st, slot, beats, vmul) {
+  const tp = st.tpl, f = makeFill(st, slot, beats);
+  const timeLs = ['H', 'R'];
+  for (let i = ev.length - 1; i >= 0; i--) {
+    const e = ev[i];
+    if (e.t < f.start - 0.01) continue;
+    if (['K', 'S', 'T1', 'T2', 'T'].includes(e.lane) || (!f.keepTime && timeLs.includes(e.lane))) ev.splice(i, 1);
+  }
+  ev.push(...f.ev);
+  if (!f.keepTime && !ev.some(e => e.lane === 'P' && e.t >= f.start)) {
+    const comp = METERS[tp.meter].comp;
+    for (let b = beats - f.L; b < beats; b++) if (beats === 3 ? b >= 1 : (b % 2 === 1 || (comp && beats === 2))) ev.push({ t: b * TPB, lane: 'P', p: 'hhp', v: 0.55 * vmul });
+  }
+  return f;
+}
+
+// The 1 after a fill: a firm kick and a short sizzly hat (or a firmer ride) — no crash on this kit
+function landAfterFill(ev, vmul) {
+  const k = ev.find(e => e.lane === 'K' && e.t === 0);
+  if (k) k.v = Math.min(1.2, k.v * 1.15); else ev.push({ t: 0, lane: 'K', p: 'kick', v: 0.95 * vmul, ch: 'x' });
+  const h = ev.find(e => e.lane === 'H' && e.t === 0);
+  if (h) {
+    if (h.p === 'hhc' || h.p === 'hhh') { h.p = 'hhs'; h.v = Math.min(1.1, h.v * 1.05); }
+    else if (h.p === 'ride') h.v = Math.min(1.2, h.v * 1.2);
+  }
+}
+
+const DEFAULT_FILL_SLOTS = [
+  { on: true, len: 2, cx: 0.45, int: 0.6, build: 0.35, seed: 101 },
+  { on: true, len: 1, cx: 0.4, int: 0.55, build: 0.2, seed: 202 },
+  { on: true, len: 2, cx: 0.55, int: 0.65, build: 0.45, seed: 303 },
+  { on: true, len: 'bar', cx: 0.6, int: 0.75, build: 0.65, seed: 404 },
+];
 
 // Which lanes keep time in a template: cymbals if it has them, otherwise its toms
 function timeLanes(tp) {
@@ -1644,12 +1912,21 @@ function createMixer(ctx, kit, opts = {}) {
 const $ = id => document.getElementById(id);
 
 // ---------------- state ----------------
-const DEFAULTS = { styleId: 'rock', meter: '4/4', gi: 0, bpm: 112, I: 0.5, B: 0.45, swing: 0, extras: false, countIn: false, vol: 0.8, time: 'auto', sound: 'auto', seed: 1234, locks: { style: false, tempo: false, meter: false } };
+// Fills: off unless turned on. Four slots that take turns at the end of each phrase.
+const cloneFillSlots = () => DEFAULT_FILL_SLOTS.map(x => ({ ...x }));
+function normFills(f) {
+  const d = { on: false, every: 4, order: 'cycle', slots: cloneFillSlots() };
+  if (!f || typeof f !== 'object') return d;
+  return { on: !!f.on, every: [2, 4, 8].includes(+f.every) ? +f.every : 4, order: f.order === 'random' ? 'random' : 'cycle',
+    slots: d.slots.map((x, i) => ({ ...x, ...((Array.isArray(f.slots) && f.slots[i]) || {}) })) };
+}
+const DEFAULTS = { fills: normFills(), styleId: 'rock', meter: '4/4', gi: 0, bpm: 112, I: 0.5, B: 0.45, swing: 0, extras: false, countIn: false, vol: 0.8, time: 'auto', sound: 'auto', seed: 1234, locks: { style: false, tempo: false, meter: false } };
 let S = { ...DEFAULTS, locks: { ...DEFAULTS.locks } };
 try { const saved = JSON.parse(localStorage.getItem('pocket-v1') || 'null'); if (saved) S = { ...S, ...saved, locks: { ...S.locks, ...(saved.locks || {}) } }; } catch (e) {}
 if (!STYLE_BY_ID[S.styleId]) S.styleId = 'rock';
 if (!METERS[S.meter]) S.meter = '4/4';
 if (!TIME_MODES.includes(S.time)) S.time = 'auto';
+S.fills = normFills(S.fills);
 if (S.sound !== 'auto' && !SOUNDS[S.sound]) S.sound = 'auto';
 const save = () => { try { localStorage.setItem('pocket-v1', JSON.stringify(S)); } catch (e) {} };
 
@@ -1663,7 +1940,7 @@ function swingNow(tpl = tplNow(), sw = S.swing, bpm = S.bpm) {
   const fast = tpl.sub === 4 ? clamp(1 - (bpm - 115) / 110, 0.5, 1) : clamp(1 - (bpm - 165) / 110, 0.6, 1);
   return sw * cap * fast;
 }
-const engineState = (extra = {}) => ({ tpl: tplNow(), I: S.I, B: S.B, swing: swingNow(), fills: 0, extras: false, seed: S.seed, bpm: S.bpm, time: S.time, ...extra });
+const engineState = (extra = {}) => ({ tpl: tplNow(), I: S.I, B: S.B, swing: swingNow(), fillCfg: S.fills, extras: false, seed: S.seed, bpm: S.bpm, time: S.time, ...extra });
 
 // ---------------- audio ----------------
 let ctx = null, KITD = null, mixer = null, ready = false, appliedSound = '';
@@ -1713,7 +1990,7 @@ function applyMix(instant) {
 const SIGMA = { K: 0.0028, S: 0.003, H: 0.002, R: 0.0024, P: 0.004, Q: 0.004, T: 0.003, T1: 0.003, T2: 0.003, X: 0 };
 function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return clamp(Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v), -2.5, 2.5); }
 
-const sched = { playing: false, bar: 0, beat: 0, next: 0, cur: null, tpl: null, countLeft: 0, timer: null };
+const sched = { playing: false, bar: 0, beat: 0, next: 0, cur: null, tpl: null, countLeft: 0, timer: null, prevFill: false, queueFill: null };
 const beatLog = [];   // {time, dur, beat, beats, barId}
 const barLog = [];    // {time, id, bar, tpl, count}
 const hitLog = [];    // {time, lane, p, v, t, len, sub, trip, barId}
@@ -1731,7 +2008,10 @@ function startBar() {
   sched.tpl = tpl;
   if (soundFor(tpl, S.sound) !== appliedSound) applyMix();
   if (sched.countLeft > 0) { sched.cur = countInBar(tpl); sched.countLeft--; }
-  else { sched.cur = compileBar(engineState(), sched.bar, false); sched.cur.barNo = sched.bar; }
+  else {
+    sched.cur = compileBar(engineState({ afterFill: sched.prevFill, forceFillSlot: sched.queueFill ?? -1 }), sched.bar, false);
+    sched.cur.barNo = sched.bar; sched.queueFill = null; sched.prevFill = !!sched.cur.fill;
+  }
   sched.cur.id = ++barId;
   barLog.push({ time: sched.next, id: barId, bar: sched.cur, tpl, count: !!sched.cur.count });
   if (barLog.length > 6) barLog.shift();
@@ -1794,7 +2074,7 @@ async function start(atTime) {
   if (ctx.state !== 'running') await ctx.resume();
   sched.tpl = null;
   applyMix(true);
-  sched.playing = true; sched.bar = 0; sched.beat = 0;
+  sched.playing = true; sched.bar = 0; sched.beat = 0; sched.prevFill = false;
   sched.countLeft = 0;
   sched.next = Math.max(atTime || 0, ctx.currentTime + 0.06);
   beatLog.length = 0; barLog.length = 0;
@@ -1809,7 +2089,7 @@ function restartNow() {
   const t = ctx.currentTime;
   mixer.fadeAll(t, 0.025);
   sched.tpl = null; applyMix(true);
-  sched.bar = 0; sched.beat = 0; sched.countLeft = 0; sched.next = t + 0.06;
+  sched.bar = 0; sched.beat = 0; sched.countLeft = 0; sched.next = t + 0.06; sched.prevFill = false; sched.queueFill = null;
   beatLog.length = 0; barLog.length = 0; hitLog.length = 0;
   pump();
 }
@@ -1905,6 +2185,7 @@ function render() {
   const key = `${tpl.style}|${tpl.name}|${S.seed}`;
   if (key !== previewKey) { morph = 1; previewKey = key; }
   previewTpl = tpl;
+  renderFills();
   save();
 }
 
@@ -1990,6 +2271,7 @@ function randomize(styleId) {
   // what keeps time: usually whatever the groove calls for, sometimes ride or toms for a fresh color
   S.time = isTomGroove(tpl) ? 'auto' : weighted(rnd, ['auto', 'hats', 'ride', 'low', 'toms'].map((m, k) => [m, lean.w[k]]));
   S.extras = false;
+  if (S.fills.on) for (const f of S.fills.slots) f.seed = (rnd() * 1e9) | 0;
   applyMix(); render();
   if (sched.playing) restartNow();
   if (!styleId) { const d = $('dice'); d.classList.remove('rolling'); void d.offsetWidth; d.classList.add('rolling'); }
@@ -2057,6 +2339,76 @@ function bindUI() {
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible' && sched.playing && !wakeLock) { try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) {} }
   });
+}
+
+// ---------------- fills ----------------
+const FILL_LENS = [[1, '1 beat'], [2, '2 beats'], ['bar', '1 bar']];
+const ICON_PLAY_SM = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
+const ICON_NEW_SM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>';
+function buildFills() {
+  const box = $('fillSlots'); box.innerHTML = '';
+  S.fills.slots.forEach((_, i) => {
+    const c = document.createElement('div'); c.className = 'fill-slot'; c.dataset.i = i;
+    c.innerHTML = `
+      <div class="fs-top">
+        <button class="fs-on" aria-pressed="true" aria-label="Use fill ${i + 1}"><span class="sw"></span></button>
+        <span class="fs-title">Fill ${i + 1}</span>
+        <span class="fs-name"></span>
+        <button class="fs-btn fs-hear" title="Hear this fill at the end of the next bar" aria-label="Hear fill ${i + 1}">${ICON_PLAY_SM}</button>
+        <button class="fs-btn fs-new" title="A different fill" aria-label="New fill ${i + 1}">${ICON_NEW_SM}</button>
+      </div>
+      <div class="seg text fs-len" role="group" aria-label="Fill ${i + 1} length">${FILL_LENS.map(([v, l]) => `<button data-v="${v}">${l}</button>`).join('')}</div>
+      <label class="mini-fader"><span>Complexity</span><input type="range" min="0" max="100" data-k="cx"></label>
+      <label class="mini-fader"><span>Intensity</span><input type="range" min="0" max="100" data-k="int"></label>
+      <label class="mini-fader"><span>Build-up</span><input type="range" min="0" max="100" data-k="build"></label>`;
+    const slot = () => S.fills.slots[i];
+    c.querySelector('.fs-on').addEventListener('click', () => { slot().on = slot().on === false; render(); });
+    c.querySelector('.fs-new').addEventListener('click', () => { slot().seed = (Math.random() * 1e9) | 0; render(); });
+    c.querySelector('.fs-hear').addEventListener('click', () => {
+      if (!ready) return;
+      sched.queueFill = i; c.classList.add('queued');
+      if (!sched.playing) start();
+    });
+    for (const b of c.querySelectorAll('.fs-len button')) b.addEventListener('click', () => { slot().len = b.dataset.v === 'bar' ? 'bar' : +b.dataset.v; render(); });
+    for (const r of c.querySelectorAll('input[type=range]')) r.addEventListener('input', () => { slot()[r.dataset.k] = r.value / 100; r.style.setProperty('--v', `${r.value}%`); render(); });
+    box.appendChild(c);
+  });
+}
+function renderFills() {
+  const F = S.fills, on = F.on;
+  $('fillsOn').setAttribute('aria-pressed', String(on));
+  $('fillsBody').hidden = !on;
+  $('fillsCard').classList.toggle('on', on);
+  for (const b of $('fillEvery').children) b.setAttribute('aria-pressed', String(+b.dataset.v === F.every));
+  for (const b of $('fillOrder').children) b.setAttribute('aria-pressed', String(b.dataset.v === F.order));
+  if (!on) return;
+  const st = engineState(), beats = METERS[st.tpl.meter].beats;
+  [...$('fillSlots').children].forEach((c, i) => {
+    const f = F.slots[i], use = f.on !== false;
+    c.classList.toggle('off', !use);
+    c.querySelector('.fs-on').setAttribute('aria-pressed', String(use));
+    for (const b of c.querySelectorAll('.fs-len button')) b.setAttribute('aria-pressed', String(String(f.len) === b.dataset.v));
+    for (const r of c.querySelectorAll('input[type=range]')) setRange(r, f[r.dataset.k] ?? 0.5);
+    let name = ''; try { name = makeFill(st, { ...f, idx: i }, beats).name; } catch (e) { name = ''; }
+    const nm = c.querySelector('.fs-name'); nm.textContent = name; nm.title = name;
+  });
+  const act = F.slots.map((f, i) => (f.on !== false ? i + 1 : 0)).filter(Boolean);
+  $('fillHint').textContent = !act.length ? 'Every fill is switched off, so the groove just keeps going.'
+    : F.order === 'random' ? `A fill at the end of every ${F.every} bars, picked at random from fill ${act.join(', ')}.`
+    : `A fill at the end of every ${F.every} bars, taking turns: ${act.map((n, k) => `fill ${n} at bar ${F.every * (k + 1)}`).join(', ')}.`;
+}
+let liveFillShown = -2;
+function markLiveFill(i) {
+  if (i === liveFillShown) return;
+  liveFillShown = i;
+  for (const c of $('fillSlots').children) { const me = +c.dataset.i === i; c.classList.toggle('live', me); if (me) c.classList.remove('queued'); }
+}
+function bindFills() {
+  buildFills();
+  $('fillsOn').addEventListener('click', () => { S.fills.on = !S.fills.on; render(); });
+  for (const b of $('fillEvery').children) b.addEventListener('click', () => { S.fills.every = +b.dataset.v; render(); });
+  for (const b of $('fillOrder').children) b.addEventListener('click', () => { S.fills.order = b.dataset.v; render(); });
+  $('fillRollAll').addEventListener('click', () => { for (const f of S.fills.slots) f.seed = (Math.random() * 1e9) | 0; render(); });
 }
 
 // ---------------- beat lights ----------------
@@ -2128,6 +2480,7 @@ function draw() {
     }
   }
   if (tpl) setBeatLights(tpl, curBeat);
+  markLiveFill(live && live.bar && live.bar.fill ? live.bar.fillSlot : -1);
   const isCount = live && live.count;
   if (!bar || !tpl) return;
   const beats = bar.len / TPB;
@@ -2247,8 +2600,10 @@ function loopEvents(bars) {
   const tpl = tplNow(), beats = METERS[tpl.meter].beats, dur = 60 / S.bpm, ratio = swingRatio(swingNow());
   const lay = (tpl.lay ?? STYLE_BY_ID[tpl.style].lay) / 1000;
   const r = mulberry((S.seed ^ 0x51ce) >>> 0), out = [];
+  let prevFill = fillSlotFor(engineState(), bars - 1) >= 0;   // the loop wraps: bar 1 lands after the last bar's fill
   for (let bar = 0; bar < bars; bar++) {
-    const cb = compileBar(engineState(), bar, false);
+    const cb = compileBar(engineState({ afterFill: prevFill }), bar, false);
+    prevFill = !!cb.fill;
     for (const e of cb.ev) {
       const b = Math.floor(e.t / TPB), w = warpBeat((e.t % TPB) / TPB, tpl.sub, ratio, e.trip);
       let dt = seededGauss(r) * (SIGMA[e.lane] ?? 0.003);
@@ -2461,18 +2816,18 @@ function renderExport() {
 // ---------------- presets ----------------
 const P = { list: [], col: null, where: 'browser', undo: null };
 const LOCAL_KEY = 'pocket-presets-v1';
-const PRESET_FIELDS = ['styleId', 'meter', 'gi', 'bpm', 'I', 'B', 'swing', 'extras', 'time', 'sound', 'seed'];
+const PRESET_FIELDS = ['styleId', 'meter', 'gi', 'bpm', 'I', 'B', 'swing', 'extras', 'time', 'sound', 'seed', 'fills'];
 function readLocal() { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]') || []; } catch (e) { return []; } }
 function writeLocal(list) { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); return true; } catch (e) { return false; } }
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 function currentPreset(name) {
-  const st = {}; for (const k of PRESET_FIELDS) st[k] = S[k];
+  const st = {}; for (const k of PRESET_FIELDS) st[k] = k === 'fills' ? JSON.parse(JSON.stringify(S.fills)) : S[k];
   return { id: newId(), name: (name || '').trim().slice(0, 48) || `${tplNow().name} · ${S.bpm}`, created: Date.now(), state: st };
 }
 function applyPreset(p) {
   const st = p.state || {};
-  for (const k of PRESET_FIELDS) if (st[k] !== undefined) S[k] = st[k];
+  for (const k of PRESET_FIELDS) if (st[k] !== undefined) S[k] = k === 'fills' ? normFills(st[k]) : st[k];
   if (!STYLE_BY_ID[S.styleId]) S.styleId = 'rock';
   if (!METERS[S.meter]) S.meter = '4/4';
   if (!TIME_MODES.includes(S.time)) S.time = 'auto';
@@ -2631,6 +2986,7 @@ window.__pocketTest = {
 buildStyles();
 buildSounds();
 bindUI();
+bindFills();
 bindKeep();
 document.addEventListener('pointerdown', () => { setPlaybackSession(); if (ctx && ctx.state !== 'running') ctx.resume(); }, { once: false, passive: true });
 render();
