@@ -1342,12 +1342,14 @@ function makeFill(st, slot, beats) {
     return { ev, start, L, keepTime: true, name: PATH_NAME.comp, landing: { crash: slot.crash === true, push: false, vel: base * 0.7 }, devices: [] };
   }
 
-  const canRate = (res, kind) => bpm * res / 60 <= (kind === 'double' ? HAND_RATE * 1.35 : kind === 'orn' ? HAND_RATE * 1.25 : HAND_RATE);
+  const hi = clamp((cx - 0.6) / 0.4, 0, 1);              // the top of the complexity range: faster, busier fills most of the time
+  const handRate = HAND_RATE + 1.8 * hi;
+  const canRate = (res, kind) => bpm * res / 60 <= (kind === 'double' ? handRate * 1.35 : kind === 'orn' ? handRate * 1.25 : handRate);
   // ---- complexity sets how much a fill MAY do, not what it must do: each fill uses at most one or two "devices",
   // and plenty stay clean. (Jeff Randall: simple fills that sound killer, fills that keep the backbeat; Mike Johnston:
   // hidden accent groupings inside 16ths, linear hand/foot ideas; rudiments, ornaments and mixed subdivisions only now and then.)
   const DEVW = {
-    simple: 0.9 - 0.55 * cx,
+    simple: Math.max(0.03, 0.9 - 0.55 * cx - 0.45 * hi),
     orn: 0.45 + 0.6 * cx,
     rud: cx > 0.45 ? 0.25 + 0.8 * cx : 0,
     mix: !tripFeel && lex.mix > 0 && cx > 0.45 ? lex.mix * 2.2 * cx : 0,
@@ -1356,7 +1358,7 @@ function makeFill(st, slot, beats) {
     backbeat: beats === 4 && L >= 2 && !lex.comp && tp.style !== 'reggae' ? 0.3 + 0.3 * cx : 0,
     odd: lex.odd * (0.45 + cx),
   };
-  const nDev = cx < 0.25 ? (rnd() < 0.25 ? 1 : 0) : cx < 0.55 ? (rnd() < 0.55 ? 1 : 0) + (rnd() < 0.1 ? 1 : 0) : +wpick({ 0: 0.22, 1: 0.5, 2: 0.28 });
+  const nDev = cx < 0.25 ? (rnd() < 0.25 ? 1 : 0) : cx < 0.55 ? (rnd() < 0.55 ? 1 : 0) + (rnd() < 0.1 ? 1 : 0) : +wpick({ 0: 0.22 - 0.14 * hi, 1: 0.5 - 0.05 * hi, 2: 0.28 + 0.19 * hi });
   const dev = new Set();
   for (let k = 0; k < nDev; k++) {
     const left = Object.fromEntries(Object.entries(DEVW).filter(([d, w]) => w > 0 && !dev.has(d)));
@@ -1389,6 +1391,14 @@ function makeFill(st, slot, beats) {
     if (!tripFeel && res === 2) w *= 1.2;              // 8ths are a big part of real fills, not just 16ths
     if (tripFeel && res === 6) w *= 0.5 + cxUp;
     if (dev.has('simple') && res >= 4) w *= 0.45;
+    if (hi > 0 && !dev.has('simple')) {
+      if (tier === 0 || /space/.test(tags)) w *= 1 - 0.85 * hi;
+      if (res === 2) w *= 1 - 0.8 * hi;
+      if (res === 6) w *= 1 + 1.6 * hi;
+      if (res === 8) w *= 1 + 1.2 * hi;
+      if (res === 4 || res === 3) w *= 1 + 0.4 * hi;
+      if (tier >= 2) w *= 1 + 0.6 * hi;
+    }
     if (dev.has('orn') && /flam|ruff|buzz/.test(tags)) w *= 1.4;
     // tempo: hands can only go so fast
     const doubles = /roll|diddle|six|jazz|five/.test(tags), orn = /herta/.test(tags);
