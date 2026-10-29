@@ -275,6 +275,10 @@ input[type="range"]:disabled { cursor: not-allowed; }
 .fs-btn:hover { border-color: var(--faint); color: var(--text); }
 .fs-btn svg { width: 15px; height: 15px; }
 .fs-btn.fs-new svg { width: 18px; height: 18px; color: var(--accent-2); }
+.fs-btn.fs-crash { width: auto; padding: 0 9px; gap: 5px; display: flex; font-size: 12px; font-weight: 700; }
+.fs-btn.fs-crash svg { width: 16px; height: 16px; }
+.fs-btn.fs-crash[aria-pressed="true"] { color: var(--text); border-color: hsl(var(--h) 80% 60% / .7); background: var(--accent-soft); }
+.fs-btn.fs-crash[aria-pressed="true"] svg { color: var(--accent-2); }
 .dice-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .dice-btn svg { width: 20px; height: 20px; color: var(--accent-2); }
 .fs-new.rolling svg, .dice-btn.rolling svg { animation: roll .6s cubic-bezier(.3,1.6,.5,1); }
@@ -1335,7 +1339,7 @@ function makeFill(st, slot, beats) {
       out(t, isK ? 'kick' : 'snare', isK ? v * 0.9 : v, tp.sub === 2 ? { trip: true } : {});
       if (!isK && rnd() < 0.35 && t - 4 > start) out(t - 4, 'snare', 0.18, tp.sub === 2 ? { trip: true } : {});   // a ghost before it
     });
-    return { ev, start, L, keepTime: true, name: PATH_NAME.comp, landing: { crash: false, push: false }, devices: [] };
+    return { ev, start, L, keepTime: true, name: PATH_NAME.comp, landing: { crash: slot.crash === true, push: false, vel: base * 0.7 }, devices: [] };
   }
 
   const canRate = (res, kind) => bpm * res / 60 <= (kind === 'double' ? HAND_RATE * 1.35 : kind === 'orn' ? HAND_RATE * 1.25 : HAND_RATE);
@@ -1512,7 +1516,7 @@ function makeFill(st, slot, beats) {
   let ending = 'through';
   const er = rnd();
   if (span >= TPB * 1.5) {
-    if (er < lex.push * (0.5 + inten)) ending = 'push';
+    if (slot.crash !== false && er < lex.push * (0.5 + inten) * (slot.crash === true ? 1.3 : 1)) ending = 'push';
     else if (er < (lex.push * (0.5 + inten)) + lex.stop) ending = 'stop';
     else if (er < (lex.push * (0.5 + inten)) + lex.stop + 0.08) ending = 'early';
   }
@@ -1593,6 +1597,8 @@ function makeFill(st, slot, beats) {
       if (ornKinds.has('kdbl') && ornLeft > 0 && n.res >= 3 && n.res <= 4 && rnd() < ornAmt * 0.5 && bpm * n.res * 2 / 60 <= 17 && !notes.some(m => m.t > t + 0.01 && m.t < t + 2 * half - 0.01)) { out(t + half, 'kick', base * 0.7 * g, xo); ornLeft--; }
       continue;
     }
+    const noCymEnd = slot.crash === false && t >= end - TPB - 0.01;   // crash switched off: no cymbal hits on the last beat
+    if (tok === 'W' && noCymEnd) { out(t, 'snare', base * g * varr(), xo); out(t, 'kick', base * 0.9 * g, xo); continue; }
     if (tok === 'W') { const cy = st.time === 'ride' || tp.parsed.R ? 'ride' : 'crash'; out(t, cy, base * (cy === 'ride' ? 1.05 : 0.85) * g * varr(), xo); out(t, 'kick', base * 0.9 * g, xo); continue; }
     if (tok === 'C') { out(t, 'crash', base * 0.95 * varr(), xo); out(t, 'kick', base * 0.9, xo); out(t, 'snare', base * 0.9 * varr(), xo); usedCrashIn = true; continue; }
     const hand = 'RXrFD'.includes(tok) ? 'R' : 'L';   // G (left flam), Y, L, l are left hand
@@ -1627,7 +1633,7 @@ function makeFill(st, slot, beats) {
       if (accent) {
         if (ornKinds.has('flam') && r1 < ornAmt * 0.55 && t - ms(24) > start) { out(t - ms(24), piece === 'rim' ? 'snare' : piece, v * 0.38, xo); orn.flam = true;  ornLeft--; }
         else if (ornKinds.has('drag') && r1 < ornAmt * 0.45 && t - ms(46) > start) { out(t - ms(46), 'snare', 0.2, xo); out(t - ms(24), 'snare', 0.24, xo); orn.ruff = true;  ornLeft--; }
-        else if (ornKinds.has('stab') && n.i !== 0 && r1 < ornAmt * 0.4) { const cy = st.time === 'ride' || tp.parsed.R ? 'ride' : 'crash'; out(t, cy, v * (cy === 'ride' ? 1 : 0.8), xo); out(t, 'kick', v * 0.9, xo); orn.stab = true; ornLeft--; }
+        else if (ornKinds.has('stab') && !noCymEnd && n.i !== 0 && r1 < ornAmt * 0.4) { const cy = st.time === 'ride' || tp.parsed.R ? 'ride' : 'crash'; out(t, cy, v * (cy === 'ride' ? 1 : 0.8), xo); out(t, 'kick', v * 0.9, xo); orn.stab = true; ornLeft--; }
       } else if (n.res >= 3 && n.res <= 4) {
         const half = TPB / n.res / 2, freeAfter = !notes.some(m => m.t > t + 0.01 && m.t < t + 2 * half - 0.01);
         if (ornKinds.has('dbl') && r1 < ornAmt * 0.35 && freeAfter && bpm * n.res * 2 / 60 <= HAND_RATE * 1.6) { out(t + half, piece, v * 0.78, xo); orn.dbl = true;  ornLeft--; }
@@ -1654,7 +1660,8 @@ function makeFill(st, slot, beats) {
   // ---- the landing: crash on the 1 when it suits the style, the size of the fill and how hard it's hit
   const big = span / TPB;
   const crashP = lex.crash * clamp(0.3 + 0.25 * big, 0.3, 1.1) * (0.55 + 0.6 * inten) * (1 + 0.35 * hard);
-  const landing = { crash: ending !== 'push' && rnd() < crashP, push: ending === 'push', vel: base * (lex.comp ? 0.7 : 1) };
+  const wantCrash = slot.crash === true ? true : slot.crash === false ? false : rnd() < crashP;
+  const landing = { crash: ending !== 'push' && wantCrash, push: ending === 'push', vel: base * (lex.comp ? 0.7 : 1) };
 
   // ---- a name that says what it is
   const tagCount = {};
@@ -1707,10 +1714,10 @@ function landAfterFill(ev, vmul, landing) {
 }
 
 const DEFAULT_FILL_SLOTS = [
-  { on: true, len: 2, cx: 0.45, int: 0.6, build: 0.35, seed: 101 },
-  { on: true, len: 1, cx: 0.4, int: 0.55, build: 0.2, seed: 202 },
-  { on: true, len: 2, cx: 0.55, int: 0.65, build: 0.45, seed: 303 },
-  { on: true, len: 'bar', cx: 0.6, int: 0.75, build: 0.65, seed: 404 },
+  { on: true, len: 2, cx: 0.45, int: 0.6, build: 0.35, seed: 101, crash: true },
+  { on: true, len: 1, cx: 0.4, int: 0.55, build: 0.2, seed: 202, crash: false },
+  { on: true, len: 2, cx: 0.55, int: 0.65, build: 0.45, seed: 303, crash: true },
+  { on: true, len: 'bar', cx: 0.6, int: 0.75, build: 0.65, seed: 404, crash: true },
 ];
 
 // Which lanes keep time in a template: cymbals if it has them, otherwise its toms
@@ -2646,6 +2653,7 @@ function bindUI() {
 
 // ---------------- fills ----------------
 const FILL_LENS = [[1, '1 beat'], [2, '2 beats'], ['bar', '1 bar']];
+const ICON_CRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="9" rx="9" ry="2.6"/><path d="M12 11.6V21"/><path d="M9 21h6"/></svg>';
 const ICON_PLAY_SM = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
 const ICON_DICE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.5" fill="currentColor" stroke="none"/></svg>';
 // a fresh fill: new pattern and new settings that still make musical sense (the bar-long slot tends to go bigger)
@@ -2658,6 +2666,8 @@ function rollFillSlot(f, i) {
   f.cx = clamp(Math.round((0.12 + 0.86 * tri() + (big ? 0.08 : 0)) * 100) / 100, 0, 1);
   f.int = clamp(Math.round((0.35 + 0.6 * tri() + (big ? 0.06 : 0)) * 100) / 100, 0, 1);
   f.build = clamp(Math.round((0.08 + 0.85 * tri() + (big ? 0.1 : 0)) * 100) / 100, 0, 1);
+  const lexC = (LEX[S.styleId] || LEX.rock).crash;
+  f.crash = r() < clamp(lexC * (big ? 1.05 : f.len === 2 ? 0.75 : 0.45) * (0.6 + 0.55 * f.int), 0.03, 0.97);
 }
 function rollAnim(el) { el.classList.remove('rolling'); void el.offsetWidth; el.classList.add('rolling'); }
 function buildFills() {
@@ -2669,6 +2679,7 @@ function buildFills() {
         <button class="fs-on" aria-pressed="true" aria-label="Use fill ${i + 1}"><span class="sw"></span></button>
         <span class="fs-title">Fill ${i + 1}</span>
         <span class="fs-gap"></span>
+        <button class="fs-btn fs-crash" aria-pressed="true" title="End this fill on a crash" aria-label="Fill ${i + 1} ends on a crash">${ICON_CRASH}<span>Crash</span></button>
         <button class="fs-btn fs-hear" title="Hear this fill at the end of the next bar" aria-label="Hear fill ${i + 1}">${ICON_PLAY_SM}</button>
         <button class="fs-btn fs-new" title="Roll a different fill" aria-label="Roll a new fill ${i + 1}">${ICON_DICE}</button>
       </div>
@@ -2678,6 +2689,7 @@ function buildFills() {
       <label class="mini-fader"><span>Build-up</span><input type="range" min="0" max="100" data-k="build"></label>`;
     const slot = () => S.fills.slots[i];
     c.querySelector('.fs-on').addEventListener('click', () => { slot().on = slot().on === false; render(); });
+    c.querySelector('.fs-crash').addEventListener('click', () => { slot().crash = slot().crash === false; render(); });
     c.querySelector('.fs-new').addEventListener('click', e => { rollFillSlot(slot(), i); rollAnim(e.currentTarget); render(); });
     c.querySelector('.fs-hear').addEventListener('click', () => {
       if (!ready) return;
@@ -2703,6 +2715,7 @@ function renderFills() {
     const f = F.slots[i], use = f.on !== false;
     c.classList.toggle('off', !use);
     c.querySelector('.fs-on').setAttribute('aria-pressed', String(use));
+    c.querySelector('.fs-crash').setAttribute('aria-pressed', String(f.crash !== false));
     for (const b of c.querySelectorAll('.fs-len button')) b.setAttribute('aria-pressed', String(String(f.len) === b.dataset.v));
     for (const r of c.querySelectorAll('input[type=range]')) setRange(r, f[r.dataset.k] ?? 0.5);
   });
