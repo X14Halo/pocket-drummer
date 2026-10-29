@@ -1259,6 +1259,8 @@ const ORN = {
   shuffle: { flam: 0.4, drag: 0.5, dbl: 0.25, buzz: 0.3 }, country: { flam: 0.45, drag: 0.35, dbl: 0.2, buzz: 0.6 }, reggae: { flam: 0.5, drag: 0.25, dbl: 0.2, buzz: 0.45 },
   latin: { flam: 0.45, drag: 0.3, dbl: 0.3, buzz: 0.35 }, jazz: { flam: 0.2, drag: 0.55, dbl: 0.15, buzz: 0.35 },
 };
+// how much each style likes triplet subdivisions (8th and 16th triplets, quarter-note triplets) inside straight grooves
+const TRIP_TASTE = { rock: 0.55, pop: 0.35, soul: 0.7, funk: 0.4, heavy: 0.65, blues: 0, shuffle: 0, country: 0.35, reggae: 0.85, latin: 0.4, jazz: 0 };
 const LEX = {
   rock:    { tags: { flamtap: 0.6, single: 3, accent: 1.4, linear: 0.7, bonham: 1.4, flam: 1, unison: 1, space: 0.8, diddle: 0.5, six: 0.6, ruff: 0.4, roll: 0.4, eighth: 1.2, doublekick: 0.25, herta: 0.3, five: 0.3 },
              paths: { descend: 3, rhlead: 1.6, cross: 1.1, two: 1.2, ascend: 0.3, snare: 0.4 }, mix: 0.3, ghost: 0.3, crash: 0.85, kick: 0.45, odd: 0.35, stop: 0.18, push: 0.12, rim: true, repeat: 0.45 },
@@ -1368,6 +1370,7 @@ function makeFill(st, slot, beats) {
   }
   const span = end - start;
   const tierMax = dev.has('simple') ? 1 : cx < 0.2 ? 1 : 2;
+  const cxUp = clamp((cx - 0.2) / 0.8, 0, 1);
   const figW = f => {
     const [id, res, toks, tier, tags] = f;
     if (res === 8) { if (!dev.has('r32')) return 0; }
@@ -1378,7 +1381,9 @@ function makeFill(st, slot, beats) {
     if (w <= 0) return 0;
     // feel: triplet grooves play triplet figures; straight grooves mostly straight, with some triplets mixed in
     if (tripFeel) { if (res === 4 || res === 8) return 0; if (res === 2) w *= 0.7; }
-    else if (res === 3 || res === 6) { if (!dev.has('mix')) return 0; w *= 1.4; }
+    else if (res === 3 || res === 6) w *= (TRIP_TASTE[tp.style] ?? 0.3) * (0.15 + 1.1 * cxUp) * (res === 6 ? 0.6 : 1) * (dev.has('mix') ? 2.2 : 1);
+    if (!tripFeel && res === 2) w *= 1.2;              // 8ths are a big part of real fills, not just 16ths
+    if (tripFeel && res === 6) w *= 0.5 + cxUp;
     if (dev.has('simple') && res >= 4) w *= 0.45;
     if (dev.has('orn') && /flam|ruff|buzz/.test(tags)) w *= 1.4;
     // tempo: hands can only go so fast
@@ -1390,7 +1395,15 @@ function makeFill(st, slot, beats) {
     return Math.max(0, w);
   };
   const pool = FIGS.map(f => [f[0], figW(f)]).filter(([, w]) => w > 0);
-  const choose = () => (pool.length ? FIG_BY_ID[wpick(Object.fromEntries(pool))] : FIG_BY_ID[tripFeel ? 't3s' : '16s']);
+  // the more complex, the more the beats change subdivision (8ths → triplets → 16ths …) instead of one grid all the way
+  const choose = (prevF) => {
+    if (!pool.length) return FIG_BY_ID[tripFeel ? 't3s' : '16s'];
+    const p2 = prevF ? pool.map(([id, w]) => [id, w * (FIG_BY_ID[id][1] === prevF[1] ? 1 - 0.55 * cxUp : 1)]) : pool;
+    return FIG_BY_ID[wpick(Object.fromEntries(p2))];
+  };
+  // quarter-note triplets (three even notes across two beats) and, in 12/8 / 6/8, straight duplets against the triplet feel
+  const qtripP = (tripFeel ? 0.12 : 0.22 * (TRIP_TASTE[tp.style] ?? 0.3)) * cxUp * (lex.comp ? 0.6 : 1);
+  const duplets = tp.sub === 3 && rnd() < 0.35 * cxUp;
 
   // ---- lay figures on the beats: a motif that repeats, then changes toward the end
   const figsUsed = [];
@@ -1422,9 +1435,13 @@ function makeFill(st, slot, beats) {
     const bStart = b * TPB, from = Math.max(start, bStart);
     let f;
     const last = b === beats - 1;
-    if (prev && !last && rnd() < lex.repeat) f = prev;
-    else f = choose();
-    if (last && prev && f === prev && rnd() < 0.6) f = choose();      // the last beat usually changes
+    if (!last && b * TPB >= start && b + 1 < beats && rnd() < qtripP) {
+      for (let k = 0; k < 3; k++) notes.push({ t: b * TPB + k * 8, tok: k === 0 ? 'X' : k === 1 ? 'Y' : 'X', b: b + (k === 2 ? 1 : 0), res: 3, i: k === 1 ? 2 : k === 2 ? 1 : 0, qt: true });
+      prev = FIG_BY_ID['t3s']; figsUsed.push(prev); b++; continue;
+    }
+    if (prev && !last && rnd() < lex.repeat * (1 - 0.5 * cxUp)) f = prev;
+    else f = choose(prev);
+    if (last && prev && f === prev && rnd() < 0.6) f = choose(prev);      // the last beat usually changes
     prev = f; figsUsed.push(f);
     const [, res, toks] = f, step = TPB / res;
     for (let i = 0; i < res; i++) {
@@ -1514,7 +1531,7 @@ function makeFill(st, slot, beats) {
   const ghostV = () => (0.15 + 0.07 * rnd()) * (0.85 + 0.3 * (st.I ?? 0.5));
   const rimOK = lex.rim && inten > 0.72;
   // triplet partials in an 8th-note groove must not be swung; in 12/8 and 6/8 a two-note figure sits on the triplet grid
-  const tf = n => (tp.sub === 2 && (n.res === 3 || n.res === 6) ? { trip: true } : tp.sub === 3 && n.res === 2 && n.i === 1 ? { t: n.b * TPB + 8 } : {});
+  const tf = n => (tp.sub !== 3 && (n.res === 3 || n.res === 6) ? { trip: true } : tp.sub === 3 && n.res === 2 && n.i === 1 ? { t: n.b * TPB + (duplets ? 6 : 8) } : {});
   let usedCrashIn = false;
   const orn = {}, ornKinds = new Set();
   if (dev.has('orn')) {
@@ -1522,6 +1539,7 @@ function makeFill(st, slot, beats) {
     ornKinds.add(wpick(w)); if (rnd() < 0.3) ornKinds.add(wpick(w));
   }
   const ornAmt = ornKinds.size ? 0.55 + 0.45 * cx : 0;
+  let ornLeft = span > 2 * TPB ? 3 : 2;   // taste: a couple of ornaments make a fill, a pile of them clutters it
   for (const n of notes) {
     const x = tf(n), t = x.t ?? n.t, xo = x.trip ? { trip: true } : {};
     const g = gain(t), tok = n.tok;
@@ -1547,15 +1565,15 @@ function makeFill(st, slot, beats) {
     if (tok === 'B') { out(t, drum === 'F' ? 'snare' : 'ltom', v * 0.95, xo); if (lex.kick > 0.2 || lex.dbl) out(t, 'kick', base * 0.85, xo); }
     if (tok === 'F' || tok === 'G') { out(t - ms(24), drum === 'S' ? 'snare' : DRUM_PIECE[drum], v * 0.38, xo); orn.flam = true; }   // flam grace
     // ornaments as complexity rises: flams and drags on accents, 32nd-note doubles and buzz strokes on taps
-    else if (ornAmt > 0 && tok !== 'D' && tok !== 'B') {
+    else if (ornAmt > 0 && ornLeft > 0 && tok !== 'D' && tok !== 'B') {
       const r1 = rnd();
       if (accent) {
-        if (ornKinds.has('flam') && r1 < ornAmt * 0.55 && t - ms(24) > start) { out(t - ms(24), piece === 'rim' ? 'snare' : piece, v * 0.38, xo); orn.flam = true; }
-        else if (ornKinds.has('drag') && r1 < ornAmt * 0.45 && t - ms(46) > start) { out(t - ms(46), 'snare', 0.2, xo); out(t - ms(24), 'snare', 0.24, xo); orn.ruff = true; }
+        if (ornKinds.has('flam') && r1 < ornAmt * 0.55 && t - ms(24) > start) { out(t - ms(24), piece === 'rim' ? 'snare' : piece, v * 0.38, xo); orn.flam = true;  ornLeft--; }
+        else if (ornKinds.has('drag') && r1 < ornAmt * 0.45 && t - ms(46) > start) { out(t - ms(46), 'snare', 0.2, xo); out(t - ms(24), 'snare', 0.24, xo); orn.ruff = true;  ornLeft--; }
       } else if (n.res >= 3 && n.res <= 4) {
         const half = TPB / n.res / 2, freeAfter = !notes.some(m => m.t > t + 0.01 && m.t < t + 2 * half - 0.01);
-        if (ornKinds.has('dbl') && r1 < ornAmt * 0.35 && freeAfter && bpm * n.res * 2 / 60 <= HAND_RATE * 1.6) { out(t + half, piece, v * 0.78, xo); orn.dbl = true; }
-        else if (ornKinds.has('buzz') && piece === 'snare' && r1 < ornAmt * 0.4) { for (let k = 1; k < 3; k++) out(t + k * ms(14), 'snare', v * (0.42 - 0.12 * k), xo); orn.buzz = true; }
+        if (ornKinds.has('dbl') && r1 < ornAmt * 0.35 && freeAfter && bpm * n.res * 2 / 60 <= HAND_RATE * 1.6) { out(t + half, piece, v * 0.78, xo); orn.dbl = true;  ornLeft--; }
+        else if (ornKinds.has('buzz') && piece === 'snare' && r1 < ornAmt * 0.4) { for (let k = 1; k < 3; k++) out(t + k * ms(14), 'snare', v * (0.42 - 0.12 * k), xo); orn.buzz = true;  ornLeft--; }
       }
     }
     if (tok === 'D') { out(t - ms(46), 'snare', 0.2, xo); out(t - ms(24), 'snare', 0.24, xo); }               // drag / ruff graces
