@@ -1396,6 +1396,22 @@ function makeFill(st, slot, beats) {
   };
   const pool = FIGS.map(f => [f[0], figW(f)]).filter(([, w]) => w > 0);
   // the more complex, the more the beats change subdivision (8ths → triplets → 16ths …) instead of one grid all the way
+  // Build-up: with it up, a fill builds in one or two ways — a real crescendo from quiet, simple rhythms that
+  // get busier toward the end, or loose varied dynamics early that get pushed hard at the end.
+  const bmodes = new Set();
+  if (build > 0.35 && rnd() < 0.45 + 0.55 * build) {
+    const pickMode = () => wpick({ cresc: 1.2, dens: cx > 0.25 ? 1 : 0.3, shape: 0.9 });
+    bmodes.add(pickMode()); if (build > 0.7 && rnd() < 0.5) bmodes.add(pickMode());
+  }
+  // Intensity: near the top, the drummer is really digging in — a big moment going into a chorus
+  const hard = clamp((inten - 0.62) / 0.38, 0, 1);
+  const RESN = { 1: 0, 2: 0.15, 3: 0.5, 4: 0.6, 6: 0.85, 8: 1 };
+  const chooseBuilding = (prevF, pb) => {
+    // early beats favour sparse, simple subdivisions; the end favours the dense ones
+    const tgt = 0.1 + 0.85 * pb;
+    const p2 = pool.map(([id, w]) => { const f = FIG_BY_ID[id], rn = RESN[f[1]] ?? 0.5; return [id, w * Math.exp(-Math.abs(rn - tgt) * 4) * (pb < 0.4 && f[3] >= 3 ? 0.2 : 1)]; });
+    return FIG_BY_ID[wpick(Object.fromEntries(p2))] || choose(prevF);
+  };
   const choose = (prevF) => {
     if (!pool.length) return FIG_BY_ID[tripFeel ? 't3s' : '16s'];
     const p2 = prevF ? pool.map(([id, w]) => [id, w * (FIG_BY_ID[id][1] === prevF[1] ? 1 - 0.55 * cxUp : 1)]) : pool;
@@ -1460,9 +1476,9 @@ function makeFill(st, slot, beats) {
       for (let k = 0; k < 3; k++) notes.push({ t: b * TPB + k * 8, tok: k === 0 ? 'X' : k === 1 ? 'Y' : 'X', b: b + (k === 2 ? 1 : 0), res: 3, i: k === 1 ? 2 : k === 2 ? 1 : 0, qt: true });
       prev = FIG_BY_ID['t3s']; figsUsed.push(prev); b++; continue;
     }
-    if (prev && !last && rnd() < lex.repeat * (1 - 0.5 * cxUp)) f = prev;
-    else f = choose(prev);
-    if (last && prev && f === prev && rnd() < 0.6) f = choose(prev);      // the last beat usually changes
+    if (prev && !last && !bmodes.has('dens') && rnd() < lex.repeat * (1 - 0.5 * cxUp)) f = prev;
+    else f = bmodes.has('dens') ? chooseBuilding(prev, (b - firstBeat) / Math.max(1, beats - 1 - firstBeat)) : choose(prev);
+    if (last && prev && f === prev && rnd() < 0.6) f = bmodes.has('dens') ? chooseBuilding(prev, 1) : choose(prev);      // the last beat usually changes
     prev = f; figsUsed.push(f);
     const [, res, toks] = f, step = TPB / res;
     for (let i = 0; i < res; i++) {
@@ -1548,10 +1564,13 @@ function makeFill(st, slot, beats) {
   };
 
   // ---- dynamics
-  const gain = t => 1 - build * 0.5 * Math.pow(clamp(1 - (t - start) / Math.max(1, span), 0, 1), 1.25);
+  const prog = t => clamp((t - start) / Math.max(1, span - TPB / 4), 0, 1);
+  const gain = t => bmodes.has('cresc')
+    ? (1 - build * 0.68) + build * 0.68 * Math.pow(prog(t), 1.15)          // starts quiet, swells to full
+    : 1 - build * 0.25 * Math.pow(1 - prog(t), 1.25);
   const varr = () => 0.93 + 0.14 * rnd();
   const ghostV = () => (0.15 + 0.07 * rnd()) * (0.85 + 0.3 * (st.I ?? 0.5));
-  const rimOK = lex.rim && inten > 0.72;
+  const rimOK = lex.rim && inten > 0.68;
   // triplet partials in an 8th-note groove must not be swung; in 12/8 and 6/8 a two-note figure sits on the triplet grid
   const tf = n => (tp.sub !== 3 && (n.res === 3 || n.res === 6) ? { trip: true } : tp.sub === 3 && n.res === 2 && n.i === 1 ? { t: n.b * TPB + (duplets ? 6 : 8) } : {});
   let usedCrashIn = false;
@@ -1578,8 +1597,9 @@ function makeFill(st, slot, beats) {
     if (tok === 'C') { out(t, 'crash', base * 0.95 * varr(), xo); out(t, 'kick', base * 0.9, xo); out(t, 'snare', base * 0.9 * varr(), xo); usedCrashIn = true; continue; }
     const hand = 'RXrFD'.includes(tok) ? 'R' : 'L';   // G (left flam), Y, L, l are left hand
     // ghosts come from the figure (r/l); in ghost-heavy styles some left-hand taps between accents soften too
-    const ghost = tok === 'r' || tok === 'l' || (tok === 'L' && n.i % 2 === 1 && rnd() < lex.ghost * 0.3 * cx);
-    const accent = 'XYBFGD'.includes(tok);
+    const ghost = ((tok === 'r' || tok === 'l') && rnd() > hard * 0.6 * prog(n.t)) || (tok === 'L' && n.i % 2 === 1 && rnd() < lex.ghost * 0.3 * cx * (1 - hard));
+    // going hard: taps turn into accents more and more toward the end
+    const accent = 'XYBFGD'.includes(tok) || (!ghost && rnd() < hard * (0.2 + 0.55 * prog(n.t)));
     let drum = ghost ? 'S' : drumFor(n, hand);
     hIdx++;
     if (tok === 'Z') {                                           // buzz: a pressed stroke = a few soft bounces
@@ -1589,8 +1609,15 @@ function makeFill(st, slot, beats) {
     let piece = DRUM_PIECE[drum];
     let v;
     if (ghost) v = ghostV();
-    else v = base * (accent ? 1 : 0.7) * g * varr() * (n.i === 0 && accent ? 1.04 : 1);
-    if (piece === 'snare' && accent && rimOK && rnd() < 0.6) piece = 'rim';
+    else v = base * (accent ? 1 : 0.7) * g * varr() * (n.i === 0 && accent ? 1.04 : 1) * (1 + 0.12 * hard * prog(n.t));
+    if (bmodes.has('shape') && !ghost) {
+      // loose, varied dynamics early in the fill; pushed hard at the end
+      const p = prog(t);
+      if (p < 0.6) v *= [0.55, 0.75, 0.95, 0.7][Math.floor(rnd() * 4)];
+      else if (p > 0.72) v = Math.max(v, base * (0.92 + 0.12 * rnd()));
+    }
+    if (piece === 'snare' && accent && rimOK && rnd() < 0.55 + 0.35 * hard) piece = 'rim';
+    if (accent && hard > 0 && n.i === 0 && lex.kick > 0.1 && rnd() < hard * 0.55) out(t, 'kick', base * 0.88 * g, xo);   // feet join the big accents
     out(t, piece, v, xo);
     if (tok === 'B') { out(t, drum === 'F' ? 'snare' : 'ltom', v * 0.95, xo); if (lex.kick > 0.2 || lex.dbl) out(t, 'kick', base * 0.85, xo); }
     if (tok === 'F' || tok === 'G') { out(t - ms(24), drum === 'S' ? 'snare' : DRUM_PIECE[drum], v * 0.38, xo); orn.flam = true; }   // flam grace
@@ -1626,7 +1653,7 @@ function makeFill(st, slot, beats) {
 
   // ---- the landing: crash on the 1 when it suits the style, the size of the fill and how hard it's hit
   const big = span / TPB;
-  const crashP = lex.crash * clamp(0.3 + 0.25 * big, 0.3, 1.1) * (0.55 + 0.6 * inten);
+  const crashP = lex.crash * clamp(0.3 + 0.25 * big, 0.3, 1.1) * (0.55 + 0.6 * inten) * (1 + 0.35 * hard);
   const landing = { crash: ending !== 'push' && rnd() < crashP, push: ending === 'push', vel: base * (lex.comp ? 0.7 : 1) };
 
   // ---- a name that says what it is
@@ -1639,7 +1666,7 @@ function makeFill(st, slot, beats) {
   let name = `${PATH_NAME[path] || 'Fill'}: ${[feelWord, ...top].join(', ')}`;
   if (ending === 'push') name += ', push'; else if (ending === 'stop') name += ', stop'; else if (landing.crash) name += ', crash';
   if (start % TPB !== 0) name += ', off-beat start';
-  return { ev, start, L: span / TPB, keepTime: false, name, landing, devices: [...dev] };
+  return { ev, start, L: span / TPB, keepTime: false, name, landing, devices: [...dev], build: [...bmodes] };
 }
 
 // Replace the end of the bar with the fill: the hands leave the groove, the hi-hat foot keeps time.
