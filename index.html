@@ -1234,10 +1234,10 @@ const FIGS = [
   ['16s', 4, 'XLRL', 1, 'single'], ['16a', 4, 'XlRl', 2, 'accent'], ['16a2', 4, 'XlXl', 2, 'accent'],
   ['16lin', 4, 'XLRK', 2, 'linear'], ['16lin2', 4, 'XLKK', 3, 'linear doublekick'], ['16lin3', 4, 'kXLR', 3, 'linear'],
   ['16pd', 4, 'XlRR', 3, 'diddle'], ['16ipd', 4, 'XllR', 3, 'diddle'], ['16dbl', 4, 'rrll', 3, 'roll'],
-  ['16sp', 4, 'X.RL', 2, 'space'], ['16sp2', 4, 'XL.L', 2, 'space'], ['16sp3', 4, 'X..L', 1, 'space'], ['16off', 4, '.lRL', 2, 'space'],
+  ['16sp', 4, 'X.RL', 2, 'space'], ['16sp2', 4, 'XL.L', 2, 'space'], ['16sp3', 4, 'X..L', 1, 'space'], ['16off', 4, '.lRL', 2, 'space'], ['16sp4', 4, 'XLR.', 2, 'space'],
   ['16b', 4, 'BlRl', 2, 'unison accent'], ['16f', 4, 'FlRl', 2, 'flam accent'], ['16d', 4, 'DlRl', 3, 'ruff accent'],
   ['16z', 4, 'ZZZX', 2, 'buzz'], ['16ft', 4, 'FRGL', 3, 'flam flamtap'],
-  ['t3s', 3, 'XLR', 1, 'single'], ['t3sh', 3, 'X.L', 1, 'shuffle space'], ['t3a', 3, 'XlR', 2, 'accent'],
+  ['t3s', 3, 'XLR', 1, 'single'], ['t3sh', 3, 'X.L', 1, 'shuffle space'], ['t3b1', 3, 'XL.', 1, 'space'], ['t3b2', 3, '.LR', 2, 'space'], ['t3a', 3, 'XlR', 2, 'accent'],
   ['t3rlk', 3, 'XLK', 2, 'bonham linear'], ['t3lrk', 3, 'YRK', 2, 'bonham linear'], ['t3kxl', 3, 'KXL', 2, 'linear bombs'],
   ['t3rll', 3, 'Xll', 2, 'jazz accent'], ['t3bkk', 3, 'BKK', 3, 'unison doublekick'], ['t3f', 3, 'FRL', 3, 'flam'],
   ['t3z', 3, 'ZZX', 2, 'buzz'], ['t3d', 3, 'DlR', 3, 'ruff'], ['t3fa', 3, 'GRL', 3, 'flam'],
@@ -1254,10 +1254,10 @@ const FIG_DESC = { _32: '32nds', _bz: 'buzz strokes', flamtap: 'flam taps', sing
 // mix: how often triplets mix into straight fills. crash: odds of a crash on the 1. kick: feet under the hands.
 // ornaments that come in as complexity rises above ~60%: how much each style uses them
 const ORN = {
-  rock: { flam: 0.5, drag: 0.3, dbl: 0.4, buzz: 0.1 }, pop: { flam: 0.5, drag: 0.3, dbl: 0.25, buzz: 0.25 }, soul: { flam: 0.35, drag: 0.5, dbl: 0.35, buzz: 0.3 },
-  funk: { flam: 0.3, drag: 0.55, dbl: 0.6, buzz: 0.15 }, heavy: { flam: 0.6, drag: 0.15, dbl: 0.5, buzz: 0 }, blues: { flam: 0.4, drag: 0.55, dbl: 0.25, buzz: 0.35 },
-  shuffle: { flam: 0.4, drag: 0.5, dbl: 0.25, buzz: 0.3 }, country: { flam: 0.45, drag: 0.35, dbl: 0.2, buzz: 0.6 }, reggae: { flam: 0.5, drag: 0.25, dbl: 0.2, buzz: 0.45 },
-  latin: { flam: 0.45, drag: 0.3, dbl: 0.3, buzz: 0.35 }, jazz: { flam: 0.2, drag: 0.55, dbl: 0.15, buzz: 0.35 },
+  rock: { flam: 0.5, drag: 0.3, dbl: 0.4, buzz: 0.1, stab: 0.35, kdbl: 0.25 }, pop: { flam: 0.5, drag: 0.3, dbl: 0.25, buzz: 0.25, stab: 0.25, kdbl: 0.1 }, soul: { flam: 0.35, drag: 0.5, dbl: 0.35, buzz: 0.3, stab: 0.2, kdbl: 0.3 },
+  funk: { flam: 0.3, drag: 0.55, dbl: 0.6, buzz: 0.15, stab: 0.3, kdbl: 0.3 }, heavy: { flam: 0.6, drag: 0.15, dbl: 0.5, buzz: 0, stab: 0.45, kdbl: 0.45 }, blues: { flam: 0.4, drag: 0.55, dbl: 0.25, buzz: 0.35, stab: 0.1, kdbl: 0 },
+  shuffle: { flam: 0.4, drag: 0.5, dbl: 0.25, buzz: 0.3, stab: 0.15, kdbl: 0.05 }, country: { flam: 0.45, drag: 0.35, dbl: 0.2, buzz: 0.6, stab: 0.1, kdbl: 0 }, reggae: { flam: 0.5, drag: 0.25, dbl: 0.2, buzz: 0.45, stab: 0.15, kdbl: 0.05 },
+  latin: { flam: 0.45, drag: 0.3, dbl: 0.3, buzz: 0.35, stab: 0.3, kdbl: 0.1 }, jazz: { flam: 0.2, drag: 0.55, dbl: 0.15, buzz: 0.35, stab: 0.05, kdbl: 0 },
 };
 // how much each style likes triplet subdivisions (8th and 16th triplets, quarter-note triplets) inside straight grooves
 const TRIP_TASTE = { rock: 0.55, pop: 0.35, soul: 0.7, funk: 0.4, heavy: 0.65, blues: 0, shuffle: 0, country: 0.35, reggae: 0.85, latin: 0.4, jazz: 0 };
@@ -1411,25 +1411,46 @@ function makeFill(st, slot, beats) {
   const firstBeat = Math.floor(start / TPB);
   let prev = null, groupCount = 0;
   if (dev.has('group')) {
-    // a steady stream with the accents grouped across the beat (3-3-2, 3-3-3-3-4, 5-5-6 …; 4s over triplets);
-    // accents travel around the toms, the notes between them are snare taps and ghosts, sometimes ending a group with the kick
-    const gres = tripFeel ? 3 : canRate(4) ? 4 : 2, step = TPB / gres, total = Math.round((end - start) / step);
-    const pats = gres === 3 ? [[4], [4, 4, 4], [5, 4], [2, 4]] : gres === 4 ? [[3, 3, 2], [3, 3, 3, 3, 4], [3, 3, 5, 5], [5, 5, 6], [3, 3, 3, 3, 2, 2], [6, 6, 4]] : [[3, 3, 2], [3]];
-    const pat = pats[Math.floor(rnd() * pats.length)];
+    // Blocks (Mike Johnston): little sticking cells, each with its own dynamic shape, strung together into groupings.
+    //   A = R(accent) L(ghost) K(strong)   B = K(strong) R(ghost) L(pop)   … arranged A A B A A B A A, A B A A B A B B (paradiddle order) …
+    //   16ths grouped 3-3-3-3-4 / 4-3-3-3-3 / 3-3-4-3-3 / 3-3-2 (Jeff Randall's 3-3-2 phrasing); 16th or 8th triplets in 3-note blocks;
+    //   32nds in 4-note blocks only at slow tempos. Accents travel around the toms; ghosts and taps stay on the snare.
     const kickOK = (lex.tags.linear ?? 0) >= 0.5 || (lex.tags.bonham ?? 0) >= 0.5;
-    const STK = { 2: ['XL'], 3: kickOK ? ['Xlr', 'XLK'] : ['Xlr', 'XLR'], 4: kickOK ? ['XlRl', 'XlrK'] : ['XlRl', 'XlrL'], 5: kickOK ? ['XlRlK', 'XlrKK'] : ['XlRlR', 'XlrlR'], 6: kickOK ? ['XlRlKK', 'XlrlKK'] : ['XlRlRl', 'XlrlRL'] };
-    const stick = {}; for (const z of Object.keys(STK)) stick[z] = STK[z][Math.floor(rnd() * STK[z].length)];
+    const cymOK = !['jazz', 'country', 'blues', 'shuffle'].includes(tp.style) && cx > 0.6;
+    let gres;
+    if (tripFeel) gres = canRate(6, 'orn') && cx > 0.6 && rnd() < 0.5 ? 6 : 3;
+    else { const r = rnd(); gres = dev.has('r32') && canRate(8, 'orn') ? 8 : r < 0.32 * (TRIP_TASTE[tp.style] ?? 0.3) && canRate(6, 'orn') ? 6 : canRate(4) ? 4 : 2; }
+    const step = TPB / gres, total = Math.round((end - start) / step);
+    // the 3-note block in its dynamic shapes (accent R / ghost L, ghost R / accent L, both accented, both ghosted)
+    const A3 = kickOK ? ['XlK', 'rYK', 'XYK', 'rlK'] : ['Xll', 'rYY', 'XlL', 'XLR'];
+    const B3 = kickOK ? ['KrY', 'KRl', 'KrL'] : ['XrY', 'XLL', 'Xrl'];
+    const A = A3[Math.floor(rnd() * A3.length)], Bk = B3[Math.floor(rnd() * B3.length)];
+    const special = cymOK && kickOK && rnd() < 0.3 ? 'FWl' : null;   // flam, up to the cymbal with the kick, then the left
+    const seqs = [];
+    const filled = () => seqs.reduce((a, x) => a + x.length, 0);
+    if (gres === 3 || gres === 6) {
+      const order = ['AABAABAA', 'ABAABABB', 'AABB', 'ABAB', 'AAAB', 'AAB'][Math.floor(rnd() * 6)];
+      for (let k = 0; filled() < total; k++) seqs.push(order[k % order.length] === 'A' ? (special && k % 4 === 3 ? special : A) : Bk);
+    } else if (gres === 8) {
+      const B4 = kickOK ? ['XlRl', 'XlrK', 'XlKK'] : ['XlRl', 'XlrL'];
+      const b4 = B4[Math.floor(rnd() * B4.length)];
+      while (filled() < total) seqs.push(b4);
+    } else {
+      const groupings = gres === 4 ? [[3, 3, 3, 3, 4], [4, 3, 3, 3, 3], [3, 3, 4, 3, 3], [3, 3, 2], [3, 3, 3, 3, 2, 2]] : [[3, 3, 2]];
+      const g = groupings[Math.floor(rnd() * groupings.length)];
+      const four = kickOK ? ['XlRl', 'XlrK'][Math.floor(rnd() * 2)] : 'XlRl', two = kickOK && rnd() < 0.5 ? 'XK' : 'XL';
+      for (let k = 0; filled() < total; k++) { const z = g[k % g.length]; seqs.push(z === 3 ? (special && k % 3 === 2 ? special : (k % 2 && rnd() < 0.35 ? Bk : A)) : z === 4 ? four : two); }
+    }
     let k = 0, gi = 0;
-    while (k < total) {
-      const size = pat[gi % pat.length], sk = stick[size];
-      for (let j = 0; j < size && k < total; j++, k++) {
+    for (const blk of seqs) {
+      for (let j = 0; j < blk.length && k < total; j++, k++) {
         const t = start + k * step;
-        notes.push({ t, tok: sk[j], b: Math.floor(t / TPB + 1e-6), res: gres, i: Math.round((t % TPB) / step), grp: gi, gpos: j });
+        notes.push({ t, tok: blk[j], b: Math.floor(t / TPB + 1e-6), res: gres, i: Math.round((t % TPB) / step), grp: gi, gpos: j });
       }
       gi++;
     }
     groupCount = gi;
-    figsUsed.push(FIG_BY_ID[gres === 3 ? 't3a' : '16a']);
+    figsUsed.push(FIG_BY_ID[gres === 3 || gres === 6 ? 't3a' : '16a']);
   }
   for (let b = groupCount ? beats : firstBeat; b < beats; b++) {
     const bStart = b * TPB, from = Math.max(start, bStart);
@@ -1501,7 +1522,7 @@ function makeFill(st, slot, beats) {
     if (nB === 2) return r < 0.5 ? ['S', 'T', 'M', 'F'] : r < 0.8 ? ['S', 'S', 'M', 'F'] : ['T', 'M', 'F', 'F'];
     return r < 0.55 ? ['S', 'S', 'T', 'M', 'F', 'F'] : r < 0.8 ? ['S', 'T', 'T', 'M', 'F'] : ['S', 'M', 'S', 'F'];
   })();
-  const hands = notes.filter(n => !'K.kC'.includes(n.tok));
+  const hands = notes.filter(n => !'K.kCW'.includes(n.tok));
   const pairs = Math.max(1, Math.ceil(hands.length / 2));
   let hIdx = 0;
   const groupPlan = rnd() < 0.5 ? ['T', 'M', 'F', 'F'] : ['S', 'T', 'M', 'F'];
@@ -1509,7 +1530,8 @@ function makeFill(st, slot, beats) {
     const p = (n.t - start) / span, beatK = n.b - firstBeat;
     const along = arr => arr[Math.min(arr.length - 1, Math.floor((Math.floor(hIdx / 2) / pairs) * arr.length))];
     if (n.bb) return 'S';
-    if (n.grp != null) return n.gpos === 0 ? groupPlan[Math.min(groupPlan.length - 1, Math.floor((n.grp / Math.max(1, groupCount)) * groupPlan.length))] : 'S';
+    if (n.grp != null) { const acc = 'XYFG'.includes(n.tok), plan = groupPlan[Math.min(groupPlan.length - 1, Math.floor((n.grp / Math.max(1, groupCount)) * groupPlan.length))];
+      return acc && (hand === 'R' || rnd() < 0.3) ? plan : 'S'; }
     if (dev.has('backbeat')) { const d = baseDrum(n, hand, p, beatK, along); return d === 'S' ? (beatK % 2 ? 'F' : 'M') : d; }
     return baseDrum(n, hand, p, beatK, along);
   };
@@ -1534,17 +1556,25 @@ function makeFill(st, slot, beats) {
   const tf = n => (tp.sub !== 3 && (n.res === 3 || n.res === 6) ? { trip: true } : tp.sub === 3 && n.res === 2 && n.i === 1 ? { t: n.b * TPB + (duplets ? 6 : 8) } : {});
   let usedCrashIn = false;
   const orn = {}, ornKinds = new Set();
+  let ornLeft = 0;
   if (dev.has('orn')) {
-    const o = ORN[tp.style] || ORN.rock, w = { flam: o.flam, drag: o.drag, dbl: tripFeel ? o.dbl * 0.5 : o.dbl, buzz: o.buzz };
+    const o = ORN[tp.style] || ORN.rock, w = { flam: o.flam, drag: o.drag, dbl: tripFeel ? o.dbl * 0.5 : o.dbl, buzz: o.buzz, stab: cx > 0.5 ? o.stab : 0, kdbl: o.kdbl };
     ornKinds.add(wpick(w)); if (rnd() < 0.3) ornKinds.add(wpick(w));
   }
   const ornAmt = ornKinds.size ? 0.55 + 0.45 * cx : 0;
-  let ornLeft = span > 2 * TPB ? 3 : 2;   // taste: a couple of ornaments make a fill, a pile of them clutters it
+  ornLeft = span > 2 * TPB ? 3 : 2;   // taste: a couple of ornaments make a fill, a pile of them clutters it
   for (const n of notes) {
     const x = tf(n), t = x.t ?? n.t, xo = x.trip ? { trip: true } : {};
     const g = gain(t), tok = n.tok;
     if (tok === '.') continue;
-    if (tok === 'K' || tok === 'k') { out(t, 'kick', base * (tok === 'K' ? 0.85 : 0.6) * g * varr(), xo); continue; }
+    if (tok === 'K' || tok === 'k') {
+      out(t, 'kick', base * (tok === 'K' ? 0.85 : 0.6) * g * varr(), xo);
+      // quick bass drum doubles (a 32nd / 16th-triplet partial later), when there's room and the foot can do it
+      const half = TPB / n.res / 2;
+      if (ornKinds.has('kdbl') && ornLeft > 0 && n.res >= 3 && n.res <= 4 && rnd() < ornAmt * 0.5 && bpm * n.res * 2 / 60 <= 17 && !notes.some(m => m.t > t + 0.01 && m.t < t + 2 * half - 0.01)) { out(t + half, 'kick', base * 0.7 * g, xo); ornLeft--; }
+      continue;
+    }
+    if (tok === 'W') { const cy = st.time === 'ride' || tp.parsed.R ? 'ride' : 'crash'; out(t, cy, base * (cy === 'ride' ? 1.05 : 0.85) * g * varr(), xo); out(t, 'kick', base * 0.9 * g, xo); continue; }
     if (tok === 'C') { out(t, 'crash', base * 0.95 * varr(), xo); out(t, 'kick', base * 0.9, xo); out(t, 'snare', base * 0.9 * varr(), xo); usedCrashIn = true; continue; }
     const hand = 'RXrFD'.includes(tok) ? 'R' : 'L';   // G (left flam), Y, L, l are left hand
     // ghosts come from the figure (r/l); in ghost-heavy styles some left-hand taps between accents soften too
@@ -1570,6 +1600,7 @@ function makeFill(st, slot, beats) {
       if (accent) {
         if (ornKinds.has('flam') && r1 < ornAmt * 0.55 && t - ms(24) > start) { out(t - ms(24), piece === 'rim' ? 'snare' : piece, v * 0.38, xo); orn.flam = true;  ornLeft--; }
         else if (ornKinds.has('drag') && r1 < ornAmt * 0.45 && t - ms(46) > start) { out(t - ms(46), 'snare', 0.2, xo); out(t - ms(24), 'snare', 0.24, xo); orn.ruff = true;  ornLeft--; }
+        else if (ornKinds.has('stab') && n.i !== 0 && r1 < ornAmt * 0.4) { const cy = st.time === 'ride' || tp.parsed.R ? 'ride' : 'crash'; out(t, cy, v * (cy === 'ride' ? 1 : 0.8), xo); out(t, 'kick', v * 0.9, xo); orn.stab = true; ornLeft--; }
       } else if (n.res >= 3 && n.res <= 4) {
         const half = TPB / n.res / 2, freeAfter = !notes.some(m => m.t > t + 0.01 && m.t < t + 2 * half - 0.01);
         if (ornKinds.has('dbl') && r1 < ornAmt * 0.35 && freeAfter && bpm * n.res * 2 / 60 <= HAND_RATE * 1.6) { out(t + half, piece, v * 0.78, xo); orn.dbl = true;  ornLeft--; }
