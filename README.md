@@ -1,6 +1,6 @@
 # Pocket Drummer
 
-Realistic drum grooves to jam along with on guitar. Pick a style, tap a tempo, slide intensity, busyness and swing, or hit **Surprise me** for a fresh groove. 259 grooves across rock, blues, shuffle, country, jazz, funk, soul, pop, reggae, latin and heavy, in 4/4, 3/4, 6/8 and 12/8. Turn on **Fills** for up to four style-aware drum fills (real stickings, ghost notes, flams, triplets, crash landings) that take turns at the end of each phrase, each with its own length, complexity, intensity and build-up; with fills on, downloads contain one full run of them. Save presets and download loops as WAV, MP3 or MIDI (.mid or .smf).
+Realistic drum grooves to jam along with on guitar. Pick a style, tap a tempo, slide intensity, busyness and swing, or hit **Surprise me** for a fresh groove. 259 grooves across rock, blues, shuffle, country, jazz, funk, soul, pop, reggae, latin and heavy, in 4/4, 3/4, 6/8 and 12/8. Turn on **Fills** for up to four style-aware drum fills (real stickings, ghost notes, flams, triplets, crash landings) that take turns at the end of each phrase, each with its own length, complexity, intensity and build-up; with fills on, downloads contain one full run of them. Save presets (and export or import them as files to back up, share or move to another device) and download loops as WAV, MP3 or MIDI (.mid or .smf).
 
 **Play it:** https://x14halo.github.io/pocket-drummer/
 

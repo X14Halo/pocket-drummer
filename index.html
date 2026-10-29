@@ -320,6 +320,9 @@ input[type="range"]:disabled { cursor: not-allowed; }
 .preset-del { flex: none; width: 42px; display: grid; place-items: center; background: none; border: none; border-left: 1px solid var(--line); color: var(--faint); }
 .preset-del:hover { color: var(--text); }
 .preset-del svg { width: 14px; height: 14px; }
+.preset-exp { border-left: 1px solid var(--line); }
+.preset-files { display: flex; gap: 8px; flex-wrap: wrap; }
+.preset-files .btn { flex: 1 1 140px; }
 .export-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .export-row .seg { flex: 1 1 200px; width: auto; }
 .export-row .btn { flex: 1 0 auto; }
@@ -467,6 +470,11 @@ footer a { color: var(--mute); }
       </form>
       <div class="preset-list" id="presetList"></div>
       <p class="hint" id="presetEmpty">Nothing saved yet. Dial in a groove you like and save it here.</p>
+      <div class="preset-files">
+        <button type="button" class="btn" id="presetExportAll" disabled>Export all</button>
+        <button type="button" class="btn" id="presetImport">Import preset file</button>
+        <input type="file" id="presetFile" accept=".json,application/json" hidden>
+      </div>
       <p class="hint" id="presetWhere"></p>
     </div>
     <div class="keep-card">
@@ -3108,7 +3116,7 @@ let exportFmt = 'wav';
 // hand a finished file to the person: a normal download on the website, a zip in the embedded view
 async function deliverFile(name, data, zipBase) {
   if (STANDALONE) {
-    const ext = name.split('.').pop(), type = { wav: 'audio/wav', mp3: 'audio/mpeg', mid: 'audio/midi', smf: 'audio/midi' }[ext];
+    const ext = name.split('.').pop(), type = { wav: 'audio/wav', mp3: 'audio/mpeg', mid: 'audio/midi', smf: 'audio/midi', json: 'application/json' }[ext];
     const url = URL.createObjectURL(new Blob([data], { type })), a = document.createElement('a');
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -3188,16 +3196,72 @@ function applyPreset(p) {
   if (sched.playing) restartNow();   // jump straight to beat 1 of the loaded groove
   toast(`Loaded “${p.name}”`);
 }
-async function savePreset() {
-  const p = currentPreset($('presetName').value);
-  $('presetName').value = '';
+const storeDoc = p => ({ name: p.name, created: p.created, state: p.state });
+async function storePresets(items) {   // add or replace presets in whichever store is live
+  if (!items.length) return true;
   if (P.col) {
-    try { await P.col.doc(p.id).set({ name: p.name, created: p.created, state: p.state }); toast(`Saved “${p.name}”`); return; }
+    try { for (const p of items) await P.col.doc(p.id).set(storeDoc(p)); return true; }
     catch (e) { P.col = null; P.where = 'browser'; }
   }
-  const list = readLocal(); list.unshift(p);
-  if (writeLocal(list)) { P.list = list; renderPresets(); toast(`Saved “${p.name}” in this browser`); }
+  const ids = new Set(items.map(p => p.id));
+  const list = [...items, ...readLocal().filter(x => !ids.has(x.id))];
+  if (!writeLocal(list)) return false;
+  P.list = list; renderPresets(); return true;
+}
+async function savePreset() {
+  const typed = $('presetName').value.trim();
+  const p = currentPreset(typed);
+  const same = typed && P.list.find(x => (x.name || '').toLowerCase() === p.name.toLowerCase());
+  if (same) p.id = same.id;   // saving under an existing name updates that preset
+  $('presetName').value = '';
+  if (await storePresets([p])) toast(`${same ? 'Updated' : 'Saved'} “${p.name}”${P.where === 'browser' ? ' in this browser' : ''}`);
   else toast('This browser is blocking storage, so the preset could not be saved.');
+}
+
+// ---- preset files: a small JSON file you can keep, share or load on another device ----
+const PRESET_APP = 'pocket-drummer';
+function presetBytes(items) {
+  const out = { app: PRESET_APP, kind: 'presets', version: 1, exported: new Date().toISOString(),
+    presets: items.map(p => ({ name: p.name, created: p.created || Date.now(), state: p.state })) };
+  return new TextEncoder().encode(JSON.stringify(out, null, 2));
+}
+async function downloadPresets(items, name) {
+  if (!items.length) { toast('No presets to export yet.'); return; }
+  if (!STANDALONE && !downloadsCap) { toast('Downloads are not available in this view.'); return; }
+  try { await deliverFile(name, presetBytes(items), name.replace(/\.json$/, '')); toast(items.length === 1 ? `Exported “${items[0].name}”` : `Exported ${items.length} presets`); }
+  catch (e) { console.error(e); toast('The preset file could not be saved. Try again.'); }
+}
+const exportPreset = p => downloadPresets([p], `pocket-preset-${slug(p.name) || 'groove'}.json`);
+const exportAllPresets = () => downloadPresets([...P.list].sort((a, b) => (b.created || 0) - (a.created || 0)), `pocket-presets-${P.list.length}.json`);
+
+function cleanState(st) {
+  if (!st || typeof st !== 'object') return null;
+  const out = {}; for (const k of PRESET_FIELDS) if (st[k] !== undefined) out[k] = st[k];
+  if (!STYLE_BY_ID[out.styleId]) return null;
+  for (const k of ['bpm', 'I', 'B', 'swing', 'gi', 'seed']) if (out[k] !== undefined && !Number.isFinite(+out[k])) delete out[k]; else if (out[k] !== undefined) out[k] = +out[k];
+  for (const k of ['I', 'B', 'swing']) if (out[k] !== undefined) out[k] = clamp(out[k], 0, 1);
+  if (out.fills !== undefined) out.fills = normFills(out.fills);
+  return out;
+}
+async function importPresets(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch (e) { toast('That file is not a Pocket Drummer preset.'); return; }
+  const raw = Array.isArray(data) ? data : Array.isArray(data && data.presets) ? data.presets : [data];
+  const known = new Set(P.list.map(p => `${(p.name || '').toLowerCase()}|${JSON.stringify(cleanState(p.state))}`));
+  const fresh = []; let dupes = 0, bad = 0;
+  for (const r of raw) {
+    const st = cleanState(r && r.state);
+    if (!st) { bad++; continue; }
+    const name = String(r.name || '').trim().slice(0, 48) || `${STYLE_BY_ID[st.styleId].name} · ${st.bpm || ''}`;
+    const key = `${name.toLowerCase()}|${JSON.stringify(st)}`;
+    if (known.has(key)) { dupes++; continue; }
+    known.add(key);
+    fresh.push({ id: newId(), name, created: Date.now() - fresh.length, state: st });
+  }
+  if (!fresh.length) { toast(bad && !dupes ? 'That file is not a Pocket Drummer preset.' : 'Those presets are already in your list.'); return; }
+  if (!(await storePresets(fresh))) { toast('This browser is blocking storage, so the presets could not be imported.'); return; }
+  if (fresh.length === 1) applyPreset(fresh[0]);   // one preset: load it straight away
+  toast(fresh.length === 1 ? `Imported and loaded “${fresh[0].name}”` : `Imported ${fresh.length} presets${dupes ? ` (${dupes} already here)` : ''}`);
 }
 async function deletePreset(p) {
   if (P.col) { try { await P.col.doc(p.id).delete(); } catch (e) { toast('Could not delete that preset. Try again.'); return; } }
@@ -3205,8 +3269,7 @@ async function deletePreset(p) {
   P.undo = p;
   toast(`Deleted “${p.name}”`, 'Undo', async () => {
     const u = P.undo; P.undo = null; if (!u) return;
-    if (P.col) { try { await P.col.doc(u.id).set({ name: u.name, created: u.created, state: u.state }); } catch (e) {} }
-    else { const l = readLocal(); l.unshift(u); writeLocal(l); P.list = l; renderPresets(); }
+    await storePresets([u]);
   });
 }
 function renderPresets() {
@@ -3225,9 +3288,13 @@ function renderPresets() {
     const del = document.createElement('button'); del.className = 'preset-del'; del.setAttribute('aria-label', `Delete ${p.name}`);
     del.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
     del.addEventListener('click', () => deletePreset(p));
-    row.append(load, del); box.appendChild(row);
+    const exp = document.createElement('button'); exp.className = 'preset-del preset-exp'; exp.setAttribute('aria-label', `Export ${p.name} as a file`); exp.title = 'Export as a file';
+    exp.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v8M4.8 7.4 8 10.6l3.2-3.2M3 13.5h10"/></svg>';
+    exp.addEventListener('click', () => exportPreset(p));
+    row.append(load, exp, del); box.appendChild(row);
   }
-  $('presetWhere').textContent = P.where === 'account' ? 'Saved to your account, so they follow you to any device.' : 'Saved in this browser.';
+  $('presetExportAll').disabled = !list.length;
+  $('presetWhere').textContent = (P.where === 'account' ? 'Saved to your account, so they follow you to any device.' : 'Saved in this browser.') + ' Export them as a file to back them up or share them, and import a file to load it here.';
 }
 
 let toastTimer = null;
@@ -3268,6 +3335,9 @@ function bindKeep() {
   for (const b of $('fmt').children) b.addEventListener('click', () => { exportFmt = b.dataset.f; renderExport(); });
   $('exportBtn').addEventListener('click', exportLoop);
   $('presetForm').addEventListener('submit', e => { e.preventDefault(); savePreset(); });
+  $('presetExportAll').addEventListener('click', exportAllPresets);
+  $('presetImport').addEventListener('click', () => $('presetFile').click());
+  $('presetFile').addEventListener('change', async e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) await importPresets(f); });
   P.list = readLocal(); renderPresets(); renderExport();
   connectAccount();
 }
