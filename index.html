@@ -2429,7 +2429,7 @@ function randomize(styleId) {
   // what keeps time: usually whatever the groove calls for, sometimes ride or toms for a fresh color
   S.time = isTomGroove(tpl) ? 'auto' : weighted(rnd, ['auto', 'hats', 'ride', 'low', 'toms'].map((m, k) => [m, lean.w[k]]));
   S.extras = false;
-  if (S.fills.on) for (const f of S.fills.slots) f.seed = (rnd() * 1e9) | 0;
+  if (S.fills.on) S.fills.slots.forEach((f, i) => rollFillSlot(f, i));   // with fills on, every fill gets a fresh roll too
   applyMix(); render();
   if (sched.playing) restartNow();
   if (!styleId) { const d = $('dice'); d.classList.remove('rolling'); void d.offsetWidth; d.classList.add('rolling'); }
@@ -2505,7 +2505,10 @@ const ICON_PLAY_SM = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4
 const ICON_DICE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.5" fill="currentColor" stroke="none"/></svg>';
 // a fresh fill: new pattern and new settings that still make musical sense (the bar-long slot tends to go bigger)
 function rollFillSlot(f, i) {
-  const r = Math.random, tri = () => (r() + r()) / 2, big = f.len === 'bar' || i === 3;
+  const r = Math.random, tri = () => (r() + r()) / 2;
+  // length too: mostly 1-2 beats like real fills, a full bar now and then (the 4th slot leans to the big one)
+  f.len = weighted(r, i === 3 ? [[1, 0.15], [2, 0.35], ['bar', 0.5]] : [[1, 0.32], [2, 0.46], ['bar', 0.22]]);
+  const big = f.len === 'bar';
   f.seed = (r() * 1e9) | 0;
   f.cx = clamp(Math.round((0.12 + 0.86 * tri() + (big ? 0.08 : 0)) * 100) / 100, 0, 1);
   f.int = clamp(Math.round((0.35 + 0.6 * tri() + (big ? 0.06 : 0)) * 100) / 100, 0, 1);
