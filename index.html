@@ -1226,7 +1226,7 @@ function embellish(ev, st, tp, beats, barNo, I, vmul) {
 // (accents, taps, ghosts, grace notes, crescendos) and a vocabulary that fits the style of the groove.
 //
 // Sticking tokens: R/L tap · X/Y accent (right/left) · r/l ghost · K kick (k soft) · B both hands (unison accent)
-//                  F flam accent · D drag (ruff) into an accent · Z buzz (press) stroke · C crash + kick · . rest
+//                  F/G flam accent (right/left lead) · D drag (ruff) into an accent · Z buzz (press) stroke · C crash + kick · . rest
 const FIGS = [
   // id, notes per beat, tokens, tier (0 plain … 3 advanced), tags
   ['8s', 2, 'XL', 1, 'single eighth'], ['8q', 2, 'X.', 0, 'space eighth'], ['8k', 2, 'XK', 1, 'linear eighth'],
@@ -1236,42 +1236,49 @@ const FIGS = [
   ['16pd', 4, 'XlRR', 3, 'diddle'], ['16ipd', 4, 'XllR', 3, 'diddle'], ['16dbl', 4, 'rrll', 3, 'roll'],
   ['16sp', 4, 'X.RL', 2, 'space'], ['16sp2', 4, 'XL.L', 2, 'space'], ['16sp3', 4, 'X..L', 1, 'space'], ['16off', 4, '.lRL', 2, 'space'],
   ['16b', 4, 'BlRl', 2, 'unison accent'], ['16f', 4, 'FlRl', 2, 'flam accent'], ['16d', 4, 'DlRl', 3, 'ruff accent'],
-  ['16z', 4, 'ZZZX', 2, 'buzz'],
+  ['16z', 4, 'ZZZX', 2, 'buzz'], ['16ft', 4, 'FRGL', 3, 'flam flamtap'],
   ['t3s', 3, 'XLR', 1, 'single'], ['t3sh', 3, 'X.L', 1, 'shuffle space'], ['t3a', 3, 'XlR', 2, 'accent'],
   ['t3rlk', 3, 'XLK', 2, 'bonham linear'], ['t3lrk', 3, 'YRK', 2, 'bonham linear'], ['t3kxl', 3, 'KXL', 2, 'linear bombs'],
   ['t3rll', 3, 'Xll', 2, 'jazz accent'], ['t3bkk', 3, 'BKK', 3, 'unison doublekick'], ['t3f', 3, 'FRL', 3, 'flam'],
-  ['t3z', 3, 'ZZX', 2, 'buzz'], ['t3d', 3, 'DlR', 3, 'ruff'],
+  ['t3z', 3, 'ZZX', 2, 'buzz'], ['t3d', 3, 'DlR', 3, 'ruff'], ['t3fa', 3, 'GRL', 3, 'flam'],
   ['x6s', 6, 'XLRLRL', 2, 'single'], ['x6six', 6, 'XllrrY', 3, 'six roll'], ['x6rlk', 6, 'XLKXLK', 3, 'bonham linear gospel'],
   ['x6g', 6, 'XLRLKK', 3, 'gospel linear doublekick'], ['x6a', 6, 'XllXll', 3, 'accent jazz'],
   ['32h', 8, 'rlX.rlX.', 3, 'ruff herta'], ['32f', 8, 'rrllrrlX', 3, 'roll five'],
 ];
 const FIG_BY_ID = Object.fromEntries(FIGS.map(f => [f[0], f]));
-const FIG_DESC = { single: 'singles', accent: 'accents and ghosts', linear: 'linear', diddle: 'paradiddles', roll: 'double strokes', space: 'space',
+const FIG_DESC = { _32: '32nds', _bz: 'buzz strokes', flamtap: 'flam taps', single: 'singles', accent: 'accents and ghosts', linear: 'linear', diddle: 'paradiddles', roll: 'double strokes', space: 'space',
   unison: 'unisons', flam: 'flams', ruff: 'ruffs', buzz: 'buzz roll', bonham: 'R-L-kick triplets', six: 'six-stroke roll', gospel: 'gospel chops',
   jazz: 'triplet accents', shuffle: 'shuffle triplets', eighth: '8ths', doublekick: 'double kick', five: 'five-stroke roll', herta: 'hertas', bombs: 'bass drum bombs' };
 
 // What each style plays. tags: how much each kind of figure belongs (0 = never). paths: how it moves around the kit.
 // mix: how often triplets mix into straight fills. crash: odds of a crash on the 1. kick: feet under the hands.
+// ornaments that come in as complexity rises above ~60%: how much each style uses them
+const ORN = {
+  rock: { flam: 0.5, drag: 0.3, dbl: 0.4, buzz: 0.1 }, pop: { flam: 0.5, drag: 0.3, dbl: 0.25, buzz: 0.25 }, soul: { flam: 0.35, drag: 0.5, dbl: 0.35, buzz: 0.3 },
+  funk: { flam: 0.3, drag: 0.55, dbl: 0.6, buzz: 0.15 }, heavy: { flam: 0.6, drag: 0.15, dbl: 0.5, buzz: 0 }, blues: { flam: 0.4, drag: 0.55, dbl: 0.25, buzz: 0.35 },
+  shuffle: { flam: 0.4, drag: 0.5, dbl: 0.25, buzz: 0.3 }, country: { flam: 0.45, drag: 0.35, dbl: 0.2, buzz: 0.6 }, reggae: { flam: 0.5, drag: 0.25, dbl: 0.2, buzz: 0.45 },
+  latin: { flam: 0.45, drag: 0.3, dbl: 0.3, buzz: 0.35 }, jazz: { flam: 0.2, drag: 0.55, dbl: 0.15, buzz: 0.35 },
+};
 const LEX = {
-  rock:    { tags: { single: 3, accent: 1.4, linear: 0.7, bonham: 1.4, flam: 1, unison: 1, space: 0.8, diddle: 0.5, six: 0.6, ruff: 0.4, roll: 0.4, eighth: 1.2, doublekick: 0.25, herta: 0.3, five: 0.3 },
+  rock:    { tags: { flamtap: 0.6, single: 3, accent: 1.4, linear: 0.7, bonham: 1.4, flam: 1, unison: 1, space: 0.8, diddle: 0.5, six: 0.6, ruff: 0.4, roll: 0.4, eighth: 1.2, doublekick: 0.25, herta: 0.3, five: 0.3 },
              paths: { descend: 3, rhlead: 1.6, cross: 1.1, two: 1.2, ascend: 0.3, snare: 0.4 }, mix: 0.3, ghost: 0.3, crash: 0.85, kick: 0.45, odd: 0.35, stop: 0.18, push: 0.12, rim: true, repeat: 0.45 },
-  pop:     { tags: { single: 3, accent: 1.6, linear: 0.5, bonham: 0.6, flam: 1.2, unison: 1.2, space: 1, diddle: 0.4, ruff: 0.5, roll: 0.3, eighth: 1.4, buzz: 0.4, herta: 0.3 },
+  pop:     { tags: { flamtap: 0.5, single: 3, accent: 1.6, linear: 0.5, bonham: 0.6, flam: 1.2, unison: 1.2, space: 1, diddle: 0.4, ruff: 0.5, roll: 0.3, eighth: 1.4, buzz: 0.4, herta: 0.3 },
              paths: { descend: 2.5, rhlead: 1.6, two: 1.4, snare: 0.8, cross: 0.5 }, mix: 0.15, ghost: 0.35, crash: 0.8, kick: 0.35, odd: 0.35, stop: 0.22, push: 0.15, rim: true, repeat: 0.5 },
-  soul:    { tags: { single: 1.6, accent: 3, linear: 1, bonham: 0.5, flam: 1, unison: 0.8, space: 1.2, diddle: 1, ruff: 1.2, roll: 0.6, eighth: 0.8, buzz: 0.6, gospel: 1, six: 0.7, herta: 0.8 },
+  soul:    { tags: { flamtap: 0.4, single: 1.6, accent: 3, linear: 1, bonham: 0.5, flam: 1, unison: 0.8, space: 1.2, diddle: 1, ruff: 1.2, roll: 0.6, eighth: 0.8, buzz: 0.6, gospel: 1, six: 0.7, herta: 0.8 },
              paths: { rhlead: 2.5, descend: 1.8, two: 1.2, snare: 1, cross: 0.6 }, mix: 0.35, ghost: 0.75, crash: 0.55, kick: 0.25, odd: 0.45, stop: 0.25, push: 0.15, rim: false, repeat: 0.4 },
   funk:    { tags: { single: 1, accent: 2.6, linear: 3, diddle: 2, ruff: 1.4, roll: 1, space: 1.6, flam: 0.8, unison: 0.8, herta: 1.4, five: 0.6, buzz: 0.4, eighth: 0.4, gospel: 0.5, doublekick: 0.5 },
              paths: { rhlead: 2.5, descend: 1.6, two: 1.2, snare: 1, latin: 0.5 }, mix: 0.15, ghost: 0.9, crash: 0.4, kick: 0.1, odd: 0.6, stop: 0.35, push: 0.2, rim: true, repeat: 0.35 },
-  heavy:   { tags: { single: 3, accent: 1, linear: 1.2, bonham: 1.6, flam: 1.6, unison: 1.6, space: 0.5, doublekick: 2.2, gospel: 1.2, six: 0.6, eighth: 1, roll: 0.4 },
+  heavy:   { tags: { flamtap: 0.5, single: 3, accent: 1, linear: 1.2, bonham: 1.6, flam: 1.6, unison: 1.6, space: 0.5, doublekick: 2.2, gospel: 1.2, six: 0.6, eighth: 1, roll: 0.4 },
              paths: { descend: 2.6, cross: 1.4, rhlead: 1, two: 1, ascend: 0.4 }, mix: 0.4, ghost: 0.05, crash: 0.92, kick: 0.85, odd: 0.25, stop: 0.2, push: 0.18, rim: true, repeat: 0.5, dbl: true },
   blues:   { tags: { single: 2, shuffle: 2.4, accent: 2, bonham: 1, jazz: 1, six: 1.4, ruff: 1.4, flam: 1, buzz: 0.8, unison: 0.8, space: 1, eighth: 1, roll: 0.5 },
              paths: { descend: 2.2, rhlead: 1.8, two: 1.4, snare: 1, cross: 0.8 }, mix: 0, ghost: 0.6, crash: 0.5, kick: 0.35, odd: 0.4, stop: 0.25, push: 0.1, rim: false, repeat: 0.45 },
   shuffle: { tags: { single: 2, shuffle: 2.4, accent: 2, bonham: 1.2, jazz: 0.6, six: 1.4, ruff: 1.2, flam: 1, buzz: 0.6, unison: 1, space: 1, eighth: 1, roll: 0.5 },
              paths: { descend: 2.4, rhlead: 1.6, two: 1.4, cross: 1, snare: 0.8 }, mix: 0, ghost: 0.55, crash: 0.6, kick: 0.4, odd: 0.4, stop: 0.22, push: 0.12, rim: false, repeat: 0.45 },
-  country: { tags: { single: 2.4, shuffle: 1.6, accent: 1.8, buzz: 2.2, flam: 1.2, ruff: 1, unison: 1, space: 1, eighth: 1.6, roll: 0.8, six: 0.4, bonham: 0.3 },
+  country: { tags: { flamtap: 0.5, single: 2.4, shuffle: 1.6, accent: 1.8, buzz: 2.2, flam: 1.2, ruff: 1, unison: 1, space: 1, eighth: 1.6, roll: 0.8, six: 0.4, bonham: 0.3 },
              paths: { descend: 2.4, two: 2, rhlead: 1.4, snare: 1, ascend: 0.3 }, mix: 0.1, ghost: 0.45, crash: 0.6, kick: 0.3, odd: 0.4, stop: 0.25, push: 0.1, rim: false, repeat: 0.5 },
-  reggae:  { tags: { single: 1.6, accent: 2, buzz: 1.6, flam: 1.4, space: 1.6, shuffle: 1, unison: 0.8, roll: 1, ruff: 0.8, eighth: 1, six: 0.5 },
+  reggae:  { tags: { flamtap: 0.5, single: 1.6, accent: 2, buzz: 1.6, flam: 1.4, space: 1.6, shuffle: 1, unison: 0.8, roll: 1, ruff: 0.8, eighth: 1, six: 0.5 },
              paths: { rhlead: 2, descend: 1.6, two: 1.4, snare: 1, ascend: 0.5 }, mix: 0.6, ghost: 0.4, crash: 0.4, kick: 0.15, odd: 0.65, stop: 0.2, push: 0.12, rim: true, repeat: 0.5 },
-  latin:   { tags: { single: 2, accent: 2.4, diddle: 1.6, flam: 1.2, space: 1.4, unison: 1.2, roll: 1, buzz: 1, eighth: 1, linear: 0.6 },
+  latin:   { tags: { flamtap: 0.6, single: 2, accent: 2.4, diddle: 1.6, flam: 1.2, space: 1.4, unison: 1.2, roll: 1, buzz: 1, eighth: 1, linear: 0.6 },
              paths: { latin: 3, descend: 1.4, rhlead: 1.4, two: 0.8 }, mix: 0.25, ghost: 0.5, crash: 0.55, kick: 0.2, odd: 0.5, stop: 0.35, push: 0.2, rim: true, repeat: 0.45 },
   jazz:    { tags: { jazz: 3, single: 1.4, shuffle: 1.6, accent: 2, bombs: 1.6, six: 1, ruff: 1.2, flam: 0.6, space: 1.6, roll: 0.5, eighth: 0.8 },
              paths: { jazz: 2.5, descend: 1.5, rhlead: 1.2, two: 0.6 }, mix: 0, ghost: 0.7, crash: 0.25, kick: 0, odd: 0.55, stop: 0.2, push: 0.15, rim: false, repeat: 0.35, comp: true },
@@ -1445,16 +1452,17 @@ function makeFill(st, slot, beats) {
   // triplet partials in an 8th-note groove must not be swung; in 12/8 and 6/8 a two-note figure sits on the triplet grid
   const tf = n => (tp.sub === 2 && (n.res === 3 || n.res === 6) ? { trip: true } : tp.sub === 3 && n.res === 2 && n.i === 1 ? { t: n.b * TPB + 8 } : {});
   let usedCrashIn = false;
+  const ornAmt = clamp((cx - 0.55) / 0.45, 0, 1), orn = {};
   for (const n of notes) {
     const x = tf(n), t = x.t ?? n.t, xo = x.trip ? { trip: true } : {};
     const g = gain(t), tok = n.tok;
     if (tok === '.') continue;
     if (tok === 'K' || tok === 'k') { out(t, 'kick', base * (tok === 'K' ? 0.85 : 0.6) * g * varr(), xo); continue; }
     if (tok === 'C') { out(t, 'crash', base * 0.95 * varr(), xo); out(t, 'kick', base * 0.9, xo); out(t, 'snare', base * 0.9 * varr(), xo); usedCrashIn = true; continue; }
-    const hand = 'RXrFD'.includes(tok) ? 'R' : 'L';
+    const hand = 'RXrFD'.includes(tok) ? 'R' : 'L';   // G (left flam), Y, L, l are left hand
     // ghosts come from the figure (r/l); in ghost-heavy styles some left-hand taps between accents soften too
     const ghost = tok === 'r' || tok === 'l' || (tok === 'L' && n.i % 2 === 1 && rnd() < lex.ghost * 0.3 * cx);
-    const accent = 'XYBFD'.includes(tok);
+    const accent = 'XYBFGD'.includes(tok);
     let drum = ghost ? 'S' : drumFor(n, hand);
     hIdx++;
     if (tok === 'Z') {                                           // buzz: a pressed stroke = a few soft bounces
@@ -1468,7 +1476,19 @@ function makeFill(st, slot, beats) {
     if (piece === 'snare' && accent && rimOK && rnd() < 0.6) piece = 'rim';
     out(t, piece, v, xo);
     if (tok === 'B') { out(t, drum === 'F' ? 'snare' : 'ltom', v * 0.95, xo); if (lex.kick > 0.2 || lex.dbl) out(t, 'kick', base * 0.85, xo); }
-    if (tok === 'F') out(t - ms(24), drum === 'S' ? 'snare' : DRUM_PIECE[drum], v * 0.38, xo);                  // flam grace
+    if (tok === 'F' || tok === 'G') { out(t - ms(24), drum === 'S' ? 'snare' : DRUM_PIECE[drum], v * 0.38, xo); orn.flam = true; }   // flam grace
+    // ornaments as complexity rises: flams and drags on accents, 32nd-note doubles and buzz strokes on taps
+    else if (ornAmt > 0 && tok !== 'D' && tok !== 'B') {
+      const o = ORN[tp.style] || ORN.rock, r1 = rnd();
+      if (accent) {
+        if (r1 < ornAmt * o.flam * 0.6 && t - ms(24) > start) { out(t - ms(24), piece === 'rim' ? 'snare' : piece, v * 0.38, xo); orn.flam = true; }
+        else if (r1 < ornAmt * (o.flam * 0.6 + o.drag * 0.45) && t - ms(46) > start) { out(t - ms(46), 'snare', 0.2, xo); out(t - ms(24), 'snare', 0.24, xo); orn.ruff = true; }
+      } else if (n.res >= 3 && n.res <= 4) {
+        const half = TPB / n.res / 2, freeAfter = !notes.some(m => m.t > t + 0.01 && m.t < t + 2 * half - 0.01);
+        if (r1 < ornAmt * o.dbl * 0.5 && freeAfter && bpm * n.res * 2 / 60 <= HAND_RATE * 1.6) { out(t + half, piece, v * 0.78, xo); orn.dbl = true; }
+        else if (piece === 'snare' && r1 < ornAmt * (o.dbl * 0.5 + o.buzz * 0.4)) { for (let k = 1; k < 3; k++) out(t + k * ms(14), 'snare', v * (0.42 - 0.12 * k), xo); orn.buzz = true; }
+      }
+    }
     if (tok === 'D') { out(t - ms(46), 'snare', 0.2, xo); out(t - ms(24), 'snare', 0.24, xo); }               // drag / ruff graces
   }
   // ---- feet: kick under the hands on the beats (rock/heavy), double kick under busy heavy fills; hi-hat foot keeps time
@@ -1496,7 +1516,8 @@ function makeFill(st, slot, beats) {
   for (const f of figsUsed) for (const tg of f[4].split(' ')) if (FIG_DESC[tg] && tg !== 'space' && tg !== 'eighth') tagCount[tg] = (tagCount[tg] || 0) + 1;
   const resSet = new Set(figsUsed.map(f => f[1]));
   const feelWord = resSet.has(6) ? 'sextuplets' : resSet.has(3) && (resSet.has(4) || resSet.has(2)) && !tripFeel ? 'triplets + 16ths' : resSet.has(3) ? 'triplets' : resSet.has(8) ? '32nds' : resSet.has(4) ? '16ths' : '8ths';
-  const top = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).map(([k]) => FIG_DESC[k]).filter(d => d !== 'singles').slice(0, 2);
+  for (const [k, d] of [['flam', 'flams'], ['ruff', 'ruffs'], ['dbl', '32nds'], ['buzz', 'buzz strokes']]) if (orn[k] && !Object.keys(tagCount).some(t => FIG_DESC[t] === d)) tagCount[k === 'dbl' ? '_32' : k === 'buzz' ? '_bz' : k] = 0.5;
+  const top = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).map(([k]) => FIG_DESC[k]).filter(d => d && d !== 'singles').slice(0, 3);
   let name = `${PATH_NAME[path] || 'Fill'}: ${[feelWord, ...top].join(', ')}`;
   if (ending === 'push') name += ', push'; else if (ending === 'stop') name += ', stop'; else if (landing.crash) name += ', crash';
   if (start % TPB !== 0) name += ', off-beat start';
@@ -2042,9 +2063,10 @@ const $ = id => document.getElementById(id);
 // Fills: off unless turned on. Four slots that take turns at the end of each phrase.
 const cloneFillSlots = () => DEFAULT_FILL_SLOTS.map(x => ({ ...x }));
 function normFills(f) {
-  const d = { on: false, every: 4, order: 'cycle', slots: cloneFillSlots() };
+  const d = { v: 2, on: false, every: 2, order: 'cycle', slots: cloneFillSlots() };
   if (!f || typeof f !== 'object') return d;
-  return { on: !!f.on, every: [2, 4, 8].includes(+f.every) ? +f.every : 4, order: f.order === 'random' ? 'random' : 'cycle',
+  const every = !f.v ? 2 : [2, 4, 8].includes(+f.every) ? +f.every : 2;   // v2: the default became every 2 bars
+  return { v: 2, on: !!f.on, every, order: f.order === 'random' ? 'random' : 'cycle',
     slots: d.slots.map((x, i) => ({ ...x, ...((Array.isArray(f.slots) && f.slots[i]) || {}) })) };
 }
 const DEFAULTS = { fills: normFills(), styleId: 'rock', meter: '4/4', gi: 0, bpm: 112, I: 0.5, B: 0.45, swing: 0, extras: false, countIn: false, vol: 0.8, time: 'auto', sound: 'auto', seed: 1234, locks: { style: false, tempo: false, meter: false } };
@@ -2136,14 +2158,22 @@ function startBar() {
   if (soundFor(tpl, S.sound) !== appliedSound) applyMix();
   if (sched.countLeft > 0) { sched.cur = countInBar(tpl); sched.countLeft--; }
   else {
-    sched.cur = compileBar(engineState({ afterFill: sched.prevFill, forceFillSlot: sched.queueFill ?? -1 }), sched.bar, false);
-    sched.cur.barNo = sched.bar; sched.queueFill = null; sched.prevFill = sched.cur.fill ? (sched.cur.landing || true) : false;
+    const opts = { afterFill: sched.prevFill, forceFillSlot: sched.queueFill ?? -1 };
+    sched.cur = compileBar(engineState(opts), sched.bar, false);
+    sched.cur.barNo = sched.bar; sched.cur.opts = opts; sched.queueFill = null; sched.prevFill = sched.cur.fill ? (sched.cur.landing || true) : false;
   }
   sched.cur.id = ++barId;
   barLog.push({ time: sched.next, id: barId, bar: sched.cur, tpl, count: !!sched.cur.count });
   if (barLog.length > 6) barLog.shift();
 }
 
+// a setting changed mid-bar: re-plan the rest of the bar that's playing, so the change is heard on the next beat
+function refreshCurrentBar() {
+  if (!sched.playing || !sched.cur || sched.cur.count || !sched.cur.opts || sched.tpl !== tplNow()) return;
+  const cb = compileBar(engineState(sched.cur.opts), sched.cur.barNo, false);
+  Object.assign(sched.cur, { ev: cb.ev, fill: cb.fill, fillSlot: cb.fillSlot, fillName: cb.fillName, landing: cb.landing });
+  sched.prevFill = cb.fill ? (cb.landing || true) : false;
+}
 function scheduleBeat() {
   if (sched.beat === 0) startBar();
   const tpl = sched.tpl, beats = METERS[tpl.meter].beats;
@@ -2313,6 +2343,7 @@ function render() {
   if (key !== previewKey) { morph = 1; previewKey = key; }
   previewTpl = tpl;
   renderFills();
+  refreshCurrentBar();
   save();
 }
 
@@ -2472,6 +2503,14 @@ function bindUI() {
 const FILL_LENS = [[1, '1 beat'], [2, '2 beats'], ['bar', '1 bar']];
 const ICON_PLAY_SM = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
 const ICON_DICE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.5" fill="currentColor" stroke="none"/></svg>';
+// a fresh fill: new pattern and new settings that still make musical sense (the bar-long slot tends to go bigger)
+function rollFillSlot(f, i) {
+  const r = Math.random, tri = () => (r() + r()) / 2, big = f.len === 'bar' || i === 3;
+  f.seed = (r() * 1e9) | 0;
+  f.cx = clamp(Math.round((0.12 + 0.86 * tri() + (big ? 0.08 : 0)) * 100) / 100, 0, 1);
+  f.int = clamp(Math.round((0.35 + 0.6 * tri() + (big ? 0.06 : 0)) * 100) / 100, 0, 1);
+  f.build = clamp(Math.round((0.08 + 0.85 * tri() + (big ? 0.1 : 0)) * 100) / 100, 0, 1);
+}
 function rollAnim(el) { el.classList.remove('rolling'); void el.offsetWidth; el.classList.add('rolling'); }
 function buildFills() {
   const box = $('fillSlots'); box.innerHTML = '';
@@ -2492,7 +2531,7 @@ function buildFills() {
       <label class="mini-fader"><span>Build-up</span><input type="range" min="0" max="100" data-k="build"></label>`;
     const slot = () => S.fills.slots[i];
     c.querySelector('.fs-on').addEventListener('click', () => { slot().on = slot().on === false; render(); });
-    c.querySelector('.fs-new').addEventListener('click', e => { slot().seed = (Math.random() * 1e9) | 0; rollAnim(e.currentTarget); render(); });
+    c.querySelector('.fs-new').addEventListener('click', e => { rollFillSlot(slot(), i); rollAnim(e.currentTarget); render(); });
     c.querySelector('.fs-hear').addEventListener('click', () => {
       if (!ready) return;
       sched.queueFill = i; c.classList.add('queued');
@@ -2538,7 +2577,7 @@ function bindFills() {
   $('fillsOn').addEventListener('click', () => { S.fills.on = !S.fills.on; render(); });
   for (const b of $('fillEvery').children) b.addEventListener('click', () => { S.fills.every = +b.dataset.v; render(); });
   for (const b of $('fillOrder').children) b.addEventListener('click', () => { S.fills.order = b.dataset.v; render(); });
-  $('fillRollAll').addEventListener('click', e => { for (const f of S.fills.slots) f.seed = (Math.random() * 1e9) | 0; rollAnim(e.currentTarget); render(); });
+  $('fillRollAll').addEventListener('click', e => { S.fills.slots.forEach((f, i) => rollFillSlot(f, i)); rollAnim(e.currentTarget); render(); });
 }
 
 // ---------------- beat lights ----------------
