@@ -1732,10 +1732,10 @@ function landAfterFill(ev, vmul, landing) {
 }
 
 const DEFAULT_FILL_SLOTS = [
-  { on: true, len: 2, cx: 0.45, int: 0.6, build: 0.35, seed: 101, crash: true },
-  { on: true, len: 1, cx: 0.4, int: 0.55, build: 0.2, seed: 202, crash: false },
-  { on: true, len: 2, cx: 0.55, int: 0.65, build: 0.45, seed: 303, crash: true },
-  { on: true, len: 'bar', cx: 0.6, int: 0.75, build: 0.65, seed: 404, crash: true },
+  { on: true, len: 'bar', cx: 0.45, int: 0.6, build: 0.35, seed: 111, crash: true },
+  { on: true, len: 2, cx: 0.4, int: 0.55, build: 0.2, seed: 222, crash: false },
+  { on: true, len: 'bar', cx: 0.55, int: 0.65, build: 0.45, seed: 333, crash: true },
+  { on: true, len: 'bar', cx: 0.6, int: 0.75, build: 0.65, seed: 444, crash: true },
 ];
 
 // Which lanes keep time in a template: cymbals if it has them, otherwise its toms
@@ -2233,11 +2233,14 @@ const $ = id => document.getElementById(id);
 // Fills: off unless turned on. Four slots that take turns at the end of each phrase.
 const cloneFillSlots = () => DEFAULT_FILL_SLOTS.map(x => ({ ...x }));
 function normFills(f) {
-  const d = { v: 2, on: false, every: 2, order: 'cycle', slots: cloneFillSlots() };
+  const d = { v: 3, on: false, every: 2, order: 'cycle', slots: cloneFillSlots() };
   if (!f || typeof f !== 'object') return d;
   const every = !f.v ? 2 : [2, 4, 8].includes(+f.every) ? +f.every : 2;   // v2: the default became every 2 bars
-  return { v: 2, on: !!f.on, every, order: f.order === 'random' ? 'random' : 'cycle',
-    slots: d.slots.map((x, i) => ({ ...x, ...((Array.isArray(f.slots) && f.slots[i]) || {}) })) };
+  // v3: the default fills became mostly 1-bar fills landing on a crash; untouched old defaults move to the new ones
+  const OLD = [[101, 2, 0.45, 0.6, 0.35], [202, 1, 0.4, 0.55, 0.2], [303, 2, 0.55, 0.65, 0.45], [404, 'bar', 0.6, 0.75, 0.65]];
+  const keepSlot = (x, i) => !(f.v < 3 && x && ['seed', 'len', 'cx', 'int', 'build'].every((k, j) => x[k] === OLD[i][j]));
+  return { v: 3, on: !!f.on, every, order: f.order === 'random' ? 'random' : 'cycle',
+    slots: d.slots.map((x, i) => { const o = Array.isArray(f.slots) && f.slots[i]; return { ...x, ...(o && keepSlot(o, i) ? o : {}) }; }) };
 }
 const DEFAULTS = { fills: normFills(), styleId: 'rock', meter: '4/4', gi: 0, bpm: 112, I: 0.5, B: 0.45, swing: 0, extras: false, countIn: false, vol: 0.8, time: 'auto', sound: 'auto', seed: 1234, locks: { style: false, tempo: false, meter: false } };
 let S = { ...DEFAULTS, locks: { ...DEFAULTS.locks } };
@@ -2677,15 +2680,16 @@ const ICON_DICE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 // a fresh fill: new pattern and new settings that still make musical sense (the bar-long slot tends to go bigger)
 function rollFillSlot(f, i) {
   const r = Math.random, tri = () => (r() + r()) / 2;
-  // length too: mostly 1-2 beats like real fills, a full bar now and then (the 4th slot leans to the big one)
-  f.len = weighted(r, i === 3 ? [[1, 0.15], [2, 0.35], ['bar', 0.5]] : [[1, 0.32], [2, 0.46], ['bar', 0.22]]);
+  // length too: usually a full bar, with a shorter 1-2 beat fill now and then for variety
+  f.len = weighted(r, i === 3 ? [[1, 0.06], [2, 0.18], ['bar', 0.76]] : [[1, 0.12], [2, 0.26], ['bar', 0.62]]);
   const big = f.len === 'bar';
   f.seed = (r() * 1e9) | 0;
   f.cx = clamp(Math.round((0.12 + 0.86 * tri() + (big ? 0.08 : 0)) * 100) / 100, 0, 1);
   f.int = clamp(Math.round((0.35 + 0.6 * tri() + (big ? 0.06 : 0)) * 100) / 100, 0, 1);
   f.build = clamp(Math.round((0.08 + 0.85 * tri() + (big ? 0.1 : 0)) * 100) / 100, 0, 1);
   const lexC = (LEX[S.styleId] || LEX.rock).crash;
-  f.crash = r() < clamp(lexC * (big ? 1.05 : f.len === 2 ? 0.75 : 0.45) * (0.6 + 0.55 * f.int), 0.03, 0.97);
+  // usually lands on a crash (about 4 in 5 bar fills in rock/pop/heavy, fewer in funk and jazz, fewer on short fills)
+  f.crash = r() < clamp((0.5 + 0.42 * lexC) * (big ? 1 : f.len === 2 ? 0.8 : 0.6) * (0.8 + 0.3 * f.int), 0.05, 0.9);
 }
 function rollAnim(el) { el.classList.remove('rolling'); void el.offsetWidth; el.classList.add('rolling'); }
 function buildFills() {
