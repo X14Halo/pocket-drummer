@@ -2232,7 +2232,20 @@ function buildStyles() {
   }
 }
 
+// A new beat (another groove, style, time signature or a Surprise-me roll) gets a fresh set of fills;
+// slider moves keep them. A loaded preset keeps its own fills.
+const grooveKey = () => `${S.styleId}|${S.meter}|${tplNow().name}|${S.seed}`;
+let lastBeatKey = null;
+function freshFillsForNewBeat() {
+  const k = grooveKey();
+  if (lastBeatKey !== null && k !== lastBeatKey) {
+    S.fills.slots.forEach((f, i) => rollFillSlot(f, i));
+    if (S.fills.on) document.querySelectorAll('#fillSlots .fs-new').forEach(rollAnim);
+  }
+  lastBeatKey = k;
+}
 function render() {
+  freshFillsForNewBeat();
   const tpl = tplNow(), st = STYLE_BY_ID[S.styleId], list = grooveList(S.styleId, S.meter);
   document.documentElement.style.setProperty('--h', st.hue);
   for (const b of $('styles').children) b.setAttribute('aria-pressed', String(b.dataset.id === S.styleId));
@@ -2350,7 +2363,6 @@ function randomize(styleId) {
   // what keeps time: usually whatever the groove calls for, sometimes ride or toms for a fresh color
   S.time = isTomGroove(tpl) ? 'auto' : weighted(rnd, ['auto', 'hats', 'ride', 'low', 'toms'].map((m, k) => [m, lean.w[k]]));
   S.extras = false;
-  if (S.fills.on) S.fills.slots.forEach((f, i) => rollFillSlot(f, i));   // with fills on, every fill gets a fresh roll too
   applyMix(); render();
   if (sched.playing) restartNow();
   if (!styleId) { const d = $('dice'); d.classList.remove('rolling'); void d.offsetWidth; d.classList.add('rolling'); }
@@ -2944,6 +2956,7 @@ function applyPreset(p) {
   if (!TIME_MODES.includes(S.time)) S.time = 'auto';
   if (S.sound !== 'auto' && !SOUNDS[S.sound]) S.sound = 'auto';
   S.bpm = clamp(Math.round(+S.bpm || 110), 40, 260);
+  lastBeatKey = grooveKey();   // keep the preset's own fills
   applyMix(); render();
   if (sched.playing) restartNow();   // jump straight to beat 1 of the loaded groove
   toast(`Loaded “${p.name}”`);
