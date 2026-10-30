@@ -1320,11 +1320,35 @@ function fillLib() {
     const hand = notes.filter(n => n.k !== 'K' && n.k !== 'p');
     const nps = new Set(hand.map(n => n.pos)).size / r[2];   // hand notes per beat
     const push = notes.some(n => n.k === 'c' && n.pos >= r[2] - 0.5);
-    return { id, style: D.FILL_LIB_STYLES[r[0]], bpm: r[1], L: r[2], feel: r[3], trip: !!r[4], cx: r[5] / 100, vel: r[6], up: r[7] / 100, q: r[8] / 100, land: !!r[9], notes, nps, push };
+    const fr = notes.map(n => { const a = n.pos + n.mt; return a - Math.floor(a + 0.12); });
+    const offs = fr.filter(x => x >= 0.4 && x <= 0.82).sort((a, b) => a - b);
+    const rs = offs.length ? clamp(offs[offs.length >> 1], 0.5, 0.75) : 0.5;     // where this drummer put the off-beat eighth
+    const s16 = fr.filter(x => (x >= 0.12 && x < 0.27 && r[3] !== 'w') || (x > 0.82 && x < 0.88)).length / Math.max(1, notes.length);
+    const last = Math.max(0, ...notes.filter(n => 'SRX123'.includes(n.k)).map(n => n.pos + n.mt));   // last drum stroke
+    return { id, style: D.FILL_LIB_STYLES[r[0]], bpm: r[1], L: r[2], feel: r[3], trip: !!r[4], cx: r[5] / 100, vel: r[6], up: r[7] / 100, q: r[8] / 100, land: !!r[9], notes, nps, push, rs, s16, last };
   });
   return FILLS;
 }
 const onTriplet = pos => Math.abs(pos * 2 - Math.round(pos * 2)) > 1e-6 && Math.abs(pos * 6 - Math.round(pos * 6)) < 1e-6;
+// In a swung or triplet groove, put each fill note on the groove's own swing: read where it fell in the beat (against the
+// drummer's own swing), call it a downbeat, off-beat eighth, triplet middle or sixteenth, and place it on that spot of
+// this groove's grid. The drummer's small pushes and drags around it are kept (at 70%).
+function swingNote(n, rs, sub2) {
+  const a = n.pos + n.mt, b = Math.floor(a + 0.12), f = a - b;
+  let cls, ctr;
+  if (f < 0.12) { cls = 'beat'; ctr = 0; }
+  else if (f >= 0.4 && f <= 0.82) { cls = 'off'; ctr = rs; }
+  else if (f >= 0.27) { cls = 'mid'; ctr = 1 / 3; }
+  else if (f < 0.27 && f >= 0.12) { cls = 'e'; ctr = 0.25; }
+  else if (f <= 0.88) { cls = 'a'; ctr = 0.75 + 0.5 * (rs - 0.5); }
+  else { cls = 'beat'; ctr = 1; }
+  // sub2 (swung eighths): off-beats and sixteenths go through the groove's swing warp; triplet middles stay triplets.
+  // triplet grooves (12/8, 6/8, shuffles written in triplets): everything lands on the triplet / sextuplet grid.
+  const GRID = sub2 ? { beat: [0, false], off: [0.5, false], mid: [1 / 3, true], e: [0.25, false], a: [0.75, false] }
+                    : { beat: [0, true], off: [2 / 3, true], mid: [1 / 3, true], e: [1 / 6, true], a: [5 / 6, true] };
+  const [g, trip] = GRID[cls], bb = cls === 'beat' && ctr === 1 ? b + 1 : b;
+  return { ...n, pos: Math.max(0, bb + g), mt: clamp((f - ctr) * 0.7, -0.03, 0.03), trip };
+}
 
 // which fill slot (0-3) plays at the end of this bar, or -1
 function fillSlotFor(st, barNo) {
@@ -1353,7 +1377,8 @@ function chooseFill(st, slot, beats) {
   const ratio = tp.sub === 3 ? 0.5 : swingRatio(st.swing);
   const swung = comp || tp.sub === 3 || (tp.sub === 2 && ratio >= 0.56);
   const src = FILL_SRC[style] || FILL_SRC.rock;
-  const feelOK = f => (swung ? (f.feel === 'w' || f.trip) : f.feel !== 'w');   // compound meters re-grid swung fills onto triplets
+  // swung grooves: swung or triplet fills, or straight ones built on quarters and eighths (they get swung to fit)
+  const feelOK = f => (swung ? (f.feel === 'w' || f.trip || f.s16 <= 0.12) : f.feel !== 'w');
   const lenOK = f => f.L === Lt || (Lt === beats && beats >= 4 && f.L === beats - 1);
   const lib = fillLib();
   let cand = lib.filter(f => lenOK(f) && src[f.style] && feelOK(f)).map(f => ({ f, w: src[f.style] }));
@@ -1372,7 +1397,9 @@ function chooseFill(st, slot, beats) {
     w *= Math.exp(-(((c.velR - velTarget) / 0.4) ** 2));
     if (build > 0.5) w *= 1 + 2 * (build - 0.5) * clamp(f.up, 0, 1); else if (build < 0.25 && f.up > 0.5) w *= 0.7;
     if (f.L !== Lt) w *= 0.35;
-    if (slot.crash === false && f.push) w *= 0.3;
+    // fills play right up to the 1: ones that stop early, or crash before the bar line, are left for later
+    if (f.last < f.L - 0.6) w *= 0.12; else if (f.last < f.L - 0.4) w *= 0.5;
+    if (f.push) w *= 0.25;
     c.score = w;
   }
   const tot = cand.reduce((a, c) => a + c.score, 0);
@@ -1395,24 +1422,22 @@ function makeFill(st, slot, beats) {
   const mtScale = clamp(bpm / f.bpm, 0.6, 1.6);
   const ramp = build > 0.15 && f.up < 0.3 ? build * 0.45 : 0;    // build-up: start softer and grow into the 1
   const crashOn = slot.crash === true ? true : slot.crash === false ? false : f.land;
+  const placed = new Set();
   for (const n0 of f.notes) {
-    let n = n0;
-    if (comp || tp.sub === 3) {   // 6/8, 12/8, triplet grooves: every note onto the triplet / sextuplet grid of the beat
-      const a = n0.pos + n0.mt, g3 = Math.round(a * 3) / 3, g = Math.abs(a - g3) < 0.09 ? g3 : Math.round(a * 6) / 6;
-      n = { ...n0, pos: Math.max(0, g), mt: a - Math.max(0, g) };
-    }
+    const n = swung ? swingNote(n0, f.rs, !(comp || tp.sub === 3)) : { ...n0, trip: onTriplet(n0.pos) };
+    if (swung && placed.has(n.k + n.pos.toFixed(3))) continue;   // two source notes landing on the same spot
+    if (swung) placed.add(n.k + n.pos.toFixed(3));
     let p = FILL_PIECE[n.k] || 'snare';
     const t = start + n.pos * TPB;
     if (t >= end) continue;
-    if (p === 'crash' && !crashOn && t >= end - TPB) continue;     // crash switched off: no cymbal push at the end
+    if (p === 'crash') continue;     // no early crashes inside the fill: the crash (when on) lands on the 1
     if (p === 'snare' && inten >= 0.8 && n.v >= 105) p = 'rim';
     else if (p === 'rim' && inten < 0.45) p = 'snare';
     const prog = n.pos / f.L;
     const v = Math.pow(n.v / 127, 1.25) * 1.12 * gain * (1 - ramp * (1 - prog));
-    ev.push({ t, lane: PIECE_LANE[p] || 'S', p, v: clamp(v, 0.03, 1.2), ch: 'f', fill: true, mt: clamp(n.mt * mtScale, -0.07, 0.07), trip: swung || onTriplet(n.pos) });
+    ev.push({ t, lane: PIECE_LANE[p] || 'S', p, v: clamp(v, 0.03, 1.2), ch: 'f', fill: true, mt: clamp(n.mt * (swung ? 1 : mtScale), -0.07, 0.07), trip: n.trip });
   }
-  const push = crashOn && f.push;
-  const landing = { crash: crashOn && !push, push, vel: clamp(0.62 + 0.45 * inten, 0.4, 1.1) * (0.85 + 0.25 * (st.I ?? 0.5)) };
+  const landing = { crash: crashOn, push: false, vel: clamp(0.62 + 0.45 * inten, 0.4, 1.1) * (0.85 + 0.25 * (st.I ?? 0.5)) };
   return { ev, start, L: f.L, keepTime: false, name: '', landing, devices: [], build: [], src: f.id };
 }
 
