@@ -6,7 +6,7 @@ Realistic drum grooves to jam along with on guitar. Pick a style, tap a tempo, s
 
 ## Sounds
 
-- Drum kit: [Virtuosity Drums](https://github.com/sfzinstruments/virtuosity_drums) by Versilian Studios (CC0), with the kick and toms tuned slightly lower and lightly dampened
+- Drum kit: a custom kit rendered from free, license-free samples (close mics, plus overhead and room mics), played back exactly as rendered with no added compression or EQ; the Room & reverb menu only adds reverb from the overhead and room mics
 - Tambourine and shaker: VSCO 2 Community Edition, via Virtuosity Drums (CC0)
 
 The whole app is a single self-contained `index.html`.
