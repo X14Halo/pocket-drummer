@@ -387,6 +387,12 @@ footer a { color: var(--mute); }
       </div>
 
       <div>
+        <div class="section-label"><span>Drum kit</span></div>
+        <div class="seg text" id="kitSel" role="group" aria-label="Drum kit"><button data-k="auto">Auto</button><button data-k="standard">Standard</button><button data-k="vintage">70s</button><button data-k="jazz">Jazz</button></div>
+        <div class="meter-hint" id="kitHint"></div>
+      </div>
+
+      <div>
         <div class="section-label"><span>Keep time on</span></div>
         <div class="seg text time" id="timeSel" role="group" aria-label="Keep time on">
           <button data-t="auto">Auto</button><button data-t="hats">Hi-hat</button><button data-t="ride">Ride</button><button data-t="low">Low tom</button><button data-t="toms">Both toms</button>
@@ -2036,13 +2042,14 @@ function normFills(f) {
   return { v: 3, on: !!f.on, every, order: f.order === 'random' ? 'random' : 'cycle',
     slots: d.slots.map((x, i) => { const o = Array.isArray(f.slots) && f.slots[i]; return { ...x, ...(o && keepSlot(o, i) ? o : {}) }; }) };
 }
-const DEFAULTS = { fills: normFills(), styleId: 'rock', meter: '4/4', gi: 0, bpm: 112, I: 0.5, B: 0.45, swing: 0, extras: false, countIn: false, vol: 0.8, time: 'auto', sound: 'auto', seed: 1234, locks: { style: false, tempo: false, meter: false } };
+const DEFAULTS = { fills: normFills(), styleId: 'rock', meter: '4/4', gi: 0, bpm: 112, I: 0.5, B: 0.45, swing: 0, extras: false, countIn: false, vol: 0.8, time: 'auto', sound: 'auto', kit: 'auto', seed: 1234, locks: { style: false, tempo: false, meter: false } };
 let S = { ...DEFAULTS, locks: { ...DEFAULTS.locks } };
 try { const saved = JSON.parse(localStorage.getItem('pocket-v1') || 'null'); if (saved) S = { ...S, ...saved, locks: { ...S.locks, ...(saved.locks || {}) } }; } catch (e) {}
 if (!STYLE_BY_ID[S.styleId]) S.styleId = 'rock';
 if (!METERS[S.meter]) S.meter = '4/4';
 if (!TIME_MODES.includes(S.time)) S.time = 'auto';
 S.fills = normFills(S.fills);
+if (S.kit !== 'auto' && !({ standard: 1, vintage: 1, jazz: 1 })[S.kit]) S.kit = 'auto';
 if (S.sound !== 'auto' && !SOUNDS[S.sound]) S.sound = 'auto';
 const save = () => { try { localStorage.setItem('pocket-v1', JSON.stringify(S)); } catch (e) {} };
 
@@ -2076,23 +2083,70 @@ function syncOffset(buf, sync) {
   for (let i = 0; i < lim; i++) { const a = Math.abs(ch[i]); if (a > bv) { bv = a; bi = i; } }
   return bi / buf.sampleRate - sync;
 }
+function kitFromMap(map, src) {
+  const KIT = {};
+  for (const s of map.seg) {
+    const k = KIT[s.n] || (KIT[s.n] = { layers: [], peaks: [], trim: (map.trim && map.trim[s.n]) || 1, rawTrim: map.kitRawTrim || undefined, src: src || undefined });
+    (k.layers[s.l] || (k.layers[s.l] = [])).push({ s: s.s, d: s.d });
+    k.peaks[s.l] = Math.max(k.peaks[s.l] || 0, s.p);
+  }
+  for (const k of Object.values(KIT)) k.top = Math.max(...k.peaks);
+  return KIT;
+}
+
+// ---------------- drum kits ----------------
+// Standard is built into the page; the 70s and jazz kits are separate files fetched the first time they're needed.
+// Auto keeps the standard kit for most styles and switches where another kit clearly suits the music better.
+const KITS = { standard: 'Standard', vintage: '70s', jazz: 'Jazz' };
+const KIT_BLURB = { standard: 'A modern studio kit, punchy and full.', vintage: 'A dry, deadened 70s kit: fat, short snare and a thuddy kick.', jazz: 'A small jazz kit: open kick, high toms, crisp snare and a washy ride.' };
+const KIT_STYLE = { jazz: 'jazz', soul: 'vintage', funk: 'vintage', reggae: 'vintage' };
+const KIT_GROOVE = { 'Bossa Nova': 'jazz' };
+const kitFor = (tpl, choice = S.kit) => (choice && choice !== 'auto' && KITS[choice] ? choice : (KIT_GROOVE[tpl.name] || KIT_STYLE[tpl.style] || 'standard'));
+let BASE_KIT = null, activeKit = 'standard', kitWanted = 'standard', kitNote = '';
+const kitLoads = {};
+function fetchKit(id) {
+  if (kitLoads[id]) return kitLoads[id];
+  return (kitLoads[id] = (async () => {
+    const get = async (f, kind) => { const r = await fetch(`kits/${id}_${f}`); if (!r.ok) throw new Error(r.status); return kind === 'json' ? r.json() : r.arrayBuffer(); };
+    const [map, c, r] = await Promise.all([get('map.json', 'json'), get('sprite.mp3'), get('room.mp3')]);
+    const [close, room] = await Promise.all([decode(ctx, new Uint8Array(c)), decode(ctx, new Uint8Array(r))]);
+    return kitFromMap(map, { close, room, offsets: { close: syncOffset(close, map.sync), room: syncOffset(room, map.sync) } });
+  })().catch(e => { delete kitLoads[id]; throw e; }));
+}
+// make the kit this groove needs the one that plays (percussion the kit lacks comes from the standard kit)
+async function ensureKit(id) {
+  kitWanted = id;
+  if (!KITD || id === activeKit) { kitNote = ''; return; }
+  if (id === 'standard') { KITD.KIT = BASE_KIT; activeKit = id; kitNote = ''; renderKit(); return; }
+  kitNote = 'loading'; renderKit();
+  try {
+    const k = await fetchKit(id);
+    if (kitWanted !== id) return;   // changed again while loading
+    KITD.KIT = { ...BASE_KIT, ...k }; activeKit = id; kitNote = '';
+  } catch (e) { console.warn('kit', id, e); kitNote = 'failed'; }
+  renderKit();
+}
+function renderKit() {
+  if (!$('kitSel')) return;
+  const tpl = tplNow(), k = kitFor(tpl);
+  for (const b of $('kitSel').children) b.setAttribute('aria-pressed', String(b.dataset.k === (S.kit || 'auto')));
+  $('kitHint').textContent = kitNote === 'loading' ? `Loading the ${KITS[k]} kit…`
+    : kitNote === 'failed' ? `The ${KITS[k]} kit couldn't load, so the standard kit is playing. Check your connection and pick it again.`
+    : (S.kit === 'auto' || !S.kit ? `Auto: the ${KITS[k]} kit suits this groove. ` : '') + KIT_BLURB[k];
+}
+
 async function loadKit() {
   const AC = window.AudioContext || window.webkitAudioContext;
   // 'playback' asks for a larger audio buffer: a backing track doesn't need low latency, and slower phones stop crackling
   try { ctx = new AC({ latencyHint: 'playback' }); } catch (e) { ctx = new AC(); }
   const map = JSON.parse($('kitmap').textContent);
   const [close, room] = await Promise.all([decode(ctx, b64ToBytes($('kitdata').textContent)), decode(ctx, b64ToBytes($('roomdata').textContent))]);
-  const KIT = {};
-  for (const s of map.seg) {
-    const k = KIT[s.n] || (KIT[s.n] = { layers: [], peaks: [], trim: (map.trim && map.trim[s.n]) || 1 });
-    (k.layers[s.l] || (k.layers[s.l] = [])).push({ s: s.s, d: s.d });
-    k.peaks[s.l] = Math.max(k.peaks[s.l] || 0, s.p);
-  }
-  for (const k of Object.values(KIT)) k.top = Math.max(...k.peaks);
-  KITD = { close, room, KIT, offsets: { close: syncOffset(close, map.sync), room: syncOffset(room, map.sync) } };
+  KITD = { close, room, offsets: { close: syncOffset(close, map.sync), room: syncOffset(room, map.sync) } };
+  KITD.KIT = BASE_KIT = kitFromMap(map, null);
   mixer = createMixer(ctx, KITD);
   applyMix(true);
   ready = true;
+  ensureKit(kitFor(tplNow()));
   setPlayButton(); renderExport();
 }
 const liveTpl = () => (sched.playing && sched.tpl ? sched.tpl : tplNow());
@@ -2302,7 +2356,9 @@ function render() {
   $('gname').textContent = tpl.name;
   $('gmeta').textContent = `${st.name} · ${tpl.meter}${tpl.session ? ' · played by a session drummer' : ''}${tpl.song ? ' · band song' : ''}`;
   if (S.sound !== 'auto' && !SOUND_ORDER.includes(S.sound)) S.sound = soundFor(tpl, S.sound);   // older saved rooms map to dry or their reverb
-  { const g = soundFor(tpl, S.sound); $('gkit').textContent = g === 'live' ? 'Dry, as rendered' : `${SOUNDS[g].name} reverb`; }
+  { const g = soundFor(tpl, S.sound); $('gkit').textContent = `${KITS[kitFor(tpl)]} kit · ` + (g === 'live' ? 'dry, as rendered' : `${SOUNDS[g].name} reverb`); }
+  if (KITD && kitFor(tpl) !== kitWanted) ensureKit(kitFor(tpl));
+  renderKit();
   $('styleHint').textContent = `Tap ${st.name} again for a fresh random ${st.name.toLowerCase()} groove.`;
   $('meterHint').textContent = METERS[S.meter].hint;
   $('bpm').textContent = Math.round(S.bpm);
@@ -2457,6 +2513,7 @@ function bindUI() {
   bindRange('volume', 'vol', () => applyMix());
   for (const b of $('timeSel').children) b.addEventListener('click', () => { S.time = b.dataset.t; render(); });
   $('soundSel').addEventListener('change', e => { S.sound = e.target.value; applyMix(); render(); });
+  for (const b of $('kitSel').children) b.addEventListener('click', () => { S.kit = b.dataset.k; render(); });
   for (const [id, k] of [['lockStyle', 'style'], ['lockTempo', 'tempo'], ['lockMeter', 'meter']]) $(id).addEventListener('click', () => { S.locks[k] = !S.locks[k]; render(); });
 
   // drag the tempo number
@@ -2936,6 +2993,7 @@ async function exportLoop() {
   if (busy || !ready) return;
   busy = true; renderExport();
   try {
+    await ensureKit(kitFor(tplNow()));   // the file uses the kit you hear
     const run = fillRun(), bars = run ? run.bars : exportBars;
     const loop = run ? loopEvents(bars, null, { fillCfg: { ...S.fills, order: 'cycle' } }) : loopEvents(bars);
     const base = `pocket-${slug(loop.tpl.name)}-${S.bpm}bpm-${loop.tpl.meter.replace('/', '-')}-${bars}bars${run ? `-with-${run.fills}-fills` : ''}`;
@@ -2982,11 +3040,11 @@ function renderExport() {
 // ---------------- presets ----------------
 const P = { list: [], col: null, where: 'browser', undo: null };
 const LOCAL_KEY = 'pocket-presets-v1';
-const PRESET_FIELDS = ['styleId', 'meter', 'gi', 'bpm', 'I', 'B', 'swing', 'extras', 'time', 'sound', 'seed', 'fills', 'song'];
+const PRESET_FIELDS = ['styleId', 'meter', 'gi', 'bpm', 'I', 'B', 'swing', 'extras', 'time', 'sound', 'kit', 'seed', 'fills', 'song'];
 // Built in: the band's two new songs, always at the top of the list
 const BUILTIN_PRESETS = [
-  { id: 'song-drowned-in-love', name: 'Drowned In Love', builtin: true, state: { styleId: 'rock', meter: '4/4', song: 'Drowned In Love', bpm: 178, I: 0.6, B: 0.3, swing: 0, time: 'auto', sound: 'auto', seed: 4101, fills: { v: 3, on: false } } },
-  { id: 'song-squeeze-on-me', name: 'Squeeze On Me', builtin: true, state: { styleId: 'rock', meter: '4/4', song: 'Squeeze On Me', bpm: 178, I: 0.6, B: 0.3, swing: 0.52, time: 'auto', sound: 'auto', seed: 4102, fills: { v: 3, on: false } } },
+  { id: 'song-drowned-in-love', name: 'Drowned In Love', builtin: true, state: { styleId: 'rock', meter: '4/4', song: 'Drowned In Love', bpm: 178, I: 0.6, B: 0.3, swing: 0, time: 'auto', sound: 'auto', kit: 'auto', seed: 4101, fills: { v: 3, on: false } } },
+  { id: 'song-squeeze-on-me', name: 'Squeeze On Me', builtin: true, state: { styleId: 'rock', meter: '4/4', song: 'Squeeze On Me', bpm: 178, I: 0.6, B: 0.3, swing: 0.52, time: 'auto', sound: 'auto', kit: 'auto', seed: 4102, fills: { v: 3, on: false } } },
 ];
 function readLocal() { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]') || []; } catch (e) { return []; } }
 function writeLocal(list) { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); return true; } catch (e) { return false; } }
@@ -3005,6 +3063,7 @@ function applyPreset(p) {
   if (st.song) { const i = grooveList(S.styleId, S.meter).findIndex(t => t.name === st.song); if (i >= 0) S.gi = i; }
   if (!TIME_MODES.includes(S.time)) S.time = 'auto';
   if (S.sound !== 'auto' && !SOUNDS[S.sound]) S.sound = 'auto';
+  if (S.kit !== 'auto' && !KITS[S.kit]) S.kit = 'auto';
   S.bpm = clamp(Math.round(+S.bpm || 110), 40, 260);
   lastBeatKey = grooveKey();   // keep the preset's own fills
   applyMix(); render();

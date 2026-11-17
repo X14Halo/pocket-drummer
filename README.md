@@ -6,7 +6,7 @@ Realistic drum grooves to jam along with on guitar. Pick a style, tap a tempo, s
 
 ## Sounds
 
-- Drum kit: a custom kit rendered from free, license-free samples (close mics, plus overhead and room mics), played back exactly as rendered with no added compression or EQ; the Room & reverb menu only adds reverb from the overhead and room mics
+- Drum kits: three custom kits rendered from free, license-free samples (close mics, plus overhead and room mics): Standard (a modern studio kit), 70s (dry and deadened) and Jazz. Auto keeps the standard kit for most styles and uses the 70s kit for soul, funk and reggae and the jazz kit for jazz and bossa nova; the Drum kit switcher overrides it. The kits play back exactly as rendered with no added compression or EQ, and the Room & reverb menu only adds reverb from the overhead and room mics. The 70s and jazz kits load from `kits/` the first time they're needed
 - Tambourine and shaker: VSCO 2 Community Edition, via Virtuosity Drums (CC0)
 
 The whole app is a single self-contained `index.html`.
